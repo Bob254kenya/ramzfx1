@@ -3,37 +3,16 @@ import { isStaging } from '../url/helpers';
 
 export const APP_IDS = {
     LOCALHOST: 36300,
-    TMP_STAGING: 64584,
     STAGING: 29934,
-    STAGING_BE: 29934,
-    STAGING_ME: 29934,
-    PRODUCTION: 65555,
-    PRODUCTION_BE: 65556,
-    PRODUCTION_ME: 65557,
+    PRODUCTION: 132580,
 };
 
 export const livechat_license_id = 12049137;
 export const livechat_client_id = '66aa088aad5a414484c1fd1fa8a5ace7';
 
 export const domain_app_ids = {
-    'dbot12.netlify.app': 80491,
-    'kingstraders.site': 85821,
-    'www.kingstraders.site': 85821,
-    'wallacetraders.site': 86003,
-    'www.wallacetraders.site': 86003,
-    'legoo.site': 85150,
-    'www.legoo.site': 85150,
-    'dbotprinters.site': 86059,
-    'www.dbotprinters.site': 86059,
-    'www.kenyanhennessy.site': 97088,
-    'kenyanhennessy.site': 97088,
-    'masterhunter.site': 96223,
-    'developmentviewport.netlify.app': 97311,
-    'www.developmentviewport.netlify.app': 97311,
-
-    
-
-
+    'ramztraders.vercel.app': 132580,
+    'www.ramztraders.vercel.app': 132580,
 };
 
 export const getCurrentProductionDomain = () =>
