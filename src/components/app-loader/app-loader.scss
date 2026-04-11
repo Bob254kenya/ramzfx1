@@ -1,11 +1,11 @@
 .trading-hub-loader {
-  font-family: 'Inter', sans-serif;
-  background-color: #0F172A;
+  font-family: 'Inter', 'Audi Type', 'Arial', sans-serif;
+  background: linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 50%, #0F0F0F 100%);
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  color: #F8FAFC;
+  color: #E0E0E0;
   overflow: hidden;
   position: fixed;
   top: 0;
@@ -27,31 +27,31 @@
   overflow: hidden;
 }
 
-/* Dollar Bill Animation */
-.dollar {
+/* Trading Symbol Animation (formerly dollar) */
+.trading-symbol {
   position: absolute;
-  color: #5AAE76;
+  color: #C0C0C0;
   font-weight: bold;
   font-size: 24px;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+  text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
   opacity: 0;
-  animation: falling linear infinite;
+  animation: fallingTrading linear infinite;
   z-index: 1;
 }
 
-@keyframes falling {
+@keyframes fallingTrading {
   0% {
     transform: translateY(-100px) translateX(0) rotate(0deg) scale(0.8);
     opacity: 0;
   }
   10% {
-    opacity: 0.7;
+    opacity: 0.8;
   }
   50% {
     transform: translateY(50vh) translateX(var(--drift, 0px)) rotate(180deg) scale(1);
   }
   90% {
-    opacity: 0.7;
+    opacity: 0.8;
   }
   100% {
     transform: translateY(calc(100vh + 100px)) translateX(calc(var(--drift, 0px) * 2)) rotate(360deg) scale(1.2);
@@ -59,31 +59,30 @@
   }
 }
 
-/* Twinkling Stars */
+/* Twinkling Particles (Audi-inspired) */
 .star {
   position: absolute;
-  background-color: white;
   border-radius: 50%;
   animation: twinkle var(--duration) infinite ease-in-out;
   opacity: 0;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 6px rgba(192, 192, 192, 0.8);
 }
 
-/* Diamond-shaped stars */
+/* Diamond-shaped particles */
 .star:nth-child(4n) {
-  background: linear-gradient(45deg, #ffffff, #93C5FD);
-  box-shadow: 0 0 8px rgba(147, 197, 253, 0.6);
+  background: linear-gradient(45deg, #C0C0C0, #FF0000);
+  box-shadow: 0 0 8px rgba(255, 0, 0, 0.6);
 }
 
-/* Larger pulsing stars */
+/* Larger pulsing particles */
 .star:nth-child(7n) {
-  animation: twinkle var(--duration) infinite ease-in-out, pulse 3s infinite ease-in-out;
+  animation: twinkle var(--duration) infinite ease-in-out, pulseRed 3s infinite ease-in-out;
 }
 
-/* Blue tinted stars */
+/* Red tinted particles */
 .star:nth-child(5n) {
-  background-color: #3B82F6;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+  background-color: #FF0000;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
 }
 
 @keyframes twinkle {
@@ -97,17 +96,28 @@
   }
 }
 
-@keyframes pulse {
+@keyframes pulseRed {
   0%, 100% {
     transform: scale(1);
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
   }
   50% {
     transform: scale(1.5);
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) translateX(10px) rotate(180deg);
   }
 }
 
 .loader-container {
-  background: rgba(15, 23, 42, 0.95);
+  background: rgba(10, 10, 10, 0.95);
   backdrop-filter: blur(12px);
   padding: 2.5rem;
   border-radius: 16px;
@@ -124,7 +134,8 @@
 
 .loader-container:hover {
   transform: translateY(0) scale(1.02);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 15px 40px rgba(255, 0, 0, 0.25);
+  border-color: rgba(255, 0, 0, 0.4);
 }
 
 @keyframes fadeIn {
@@ -150,26 +161,30 @@
 }
 
 .logo-main {
-  font-size: 3rem;
+  font-size: 3.5rem;
   font-weight: 800;
-  color: #3B82F6;
-  letter-spacing: 1px;
+  color: #FF0000;
+  letter-spacing: 2px;
   margin-bottom: 0.25rem;
   text-transform: uppercase;
-  background: linear-gradient(to right, #3B82F6, #93C5FD);
+  background: linear-gradient(135deg, #FF0000, #C0C0C0);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  text-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
 }
 
 .logo-sub {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #E2E8F0;
-  letter-spacing: 3px;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #C0C0C0;
+  letter-spacing: 4px;
   text-transform: uppercase;
   margin-top: -0.5rem;
+  background: linear-gradient(135deg, #E0E0E0, #A0A0A0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .welcome-message {
@@ -188,16 +203,17 @@
 }
 
 .welcome-title {
-  font-size: 1.2rem;
-  color: #E2E8F0;
+  font-size: 1rem;
+  color: #C0C0C0;
   margin-bottom: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .welcome-text {
   font-size: 1rem;
-  color: #F8FAFC;
+  color: #E0E0E0;
   line-height: 1.7;
   max-width: 340px;
   margin: 0 auto;
@@ -222,7 +238,7 @@
 .feature-main {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #93C5FD;
+  color: #FF0000;
   margin-bottom: 1.25rem;
   padding-left: 1.75rem;
   position: relative;
@@ -237,19 +253,10 @@
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
-  background-color: #3B82F6;
+  background-color: #FF0000;
   border-radius: 50%;
-  box-shadow: 0 0 12px #3B82F6;
-  animation: pulse 2s infinite ease-in-out;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: translateY(-50%) scale(1);
-  }
-  50% {
-    transform: translateY(-50%) scale(1.2);
-  }
+  box-shadow: 0 0 12px #FF0000;
+  animation: pulseRed 2s infinite ease-in-out;
 }
 
 .feature-list {
@@ -259,7 +266,7 @@
 
 .feature-item {
   font-size: 1rem;
-  color: #E2E8F0;
+  color: #C0C0C0;
   margin-bottom: 0.75rem;
   position: relative;
   padding-left: 1.5rem;
@@ -269,26 +276,27 @@
 }
 
 .feature-item:hover {
-  color: #FFFFFF;
+  color: #FF0000;
   transform: translateX(4px);
 }
 
 .feature-item:before {
-  content: "→";
+  content: "⚡";
   position: absolute;
   left: 0;
-  color: #3B82F6;
+  color: #FF0000;
   font-weight: 700;
   transition: all 0.3s ease;
 }
 
 .feature-item:hover:before {
   transform: translateX(4px);
+  content: "▶";
 }
 
 .feature-tagline {
   font-size: 0.95rem;
-  color: #94A3B8;
+  color: #808080;
   text-align: center;
   margin-top: 2rem;
   font-style: italic;
@@ -302,7 +310,7 @@
   top: 50%;
   width: 30px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, #3B82F6);
+  background: linear-gradient(90deg, transparent, #FF0000);
 }
 
 .feature-tagline:before {
@@ -311,7 +319,7 @@
 
 .feature-tagline:after {
   right: 20%;
-  background: linear-gradient(90deg, #3B82F6, transparent);
+  background: linear-gradient(90deg, #FF0000, transparent);
 }
 
 .progress-container {
@@ -333,12 +341,12 @@
   justify-content: space-between;
   margin-bottom: 0.75rem;
   font-size: 0.9rem;
-  color: #E2E8F0;
+  color: #C0C0C0;
   letter-spacing: 0.5px;
 }
 
 .progress-percent {
-  color: #93C5FD;
+  color: #FF0000;
   font-weight: 600;
 }
 
@@ -352,9 +360,9 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563EB, #3B82F6);
+  background: linear-gradient(90deg, #CC0000, #FF0000);
   border-radius: 3px;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 12px rgba(255, 0, 0, 0.5);
   transition: width 0.4s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
@@ -369,7 +377,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: #3B82F6;
+  background-color: #FF0000;
   opacity: 0.3;
   animation: dotPulse 1.8s infinite ease-in-out;
 }
@@ -390,9 +398,27 @@
   0%, 100% {
     transform: scale(0.8);
     opacity: 0.3;
+    background-color: #C0C0C0;
   }
   50% {
     transform: scale(1.2);
     opacity: 0.8;
+    background-color: #FF0000;
   }
+}
+
+/* Additional Audi-inspired ring animations */
+@keyframes ringRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.audi-particle {
+  position: absolute;
+  pointer-events: none;
+  animation: ringRotate 20s infinite linear;
 }

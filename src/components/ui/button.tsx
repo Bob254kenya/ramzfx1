@@ -7,19 +7,19 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const buttonVariants = {
-  default: "bg-primary text-primary-foreground hover:bg-primary/90",
-  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-  outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-  secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-  ghost: "hover:bg-accent hover:text-accent-foreground",
-  link: "text-primary underline-offset-4 hover:underline",
+  default: "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/30",
+  destructive: "bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-700 hover:to-red-700 shadow-lg shadow-rose-500/25",
+  outline: "border-2 border-emerald-500 bg-transparent text-emerald-600 hover:bg-emerald-500 hover:text-white dark:border-emerald-400 dark:text-emerald-400",
+  secondary: "bg-gradient-to-r from-slate-700 to-slate-800 text-slate-100 hover:from-slate-800 hover:to-slate-900 shadow-lg shadow-slate-900/20 dark:from-slate-600 dark:to-slate-700",
+  ghost: "text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30",
+  link: "text-cyan-600 underline-offset-8 hover:underline hover:text-cyan-700 dark:text-cyan-400 font-semibold",
 };
 
 const buttonSizes = {
-  default: "h-10 px-4 py-2",
-  sm: "h-9 rounded-md px-3",
-  lg: "h-11 rounded-md px-8",
-  icon: "h-10 w-10",
+  default: "h-12 px-6 py-2 text-base",
+  sm: "h-9 px-4 text-sm rounded-xl",
+  lg: "h-14 px-8 text-lg rounded-2xl",
+  icon: "h-12 w-12 rounded-xl",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -30,7 +30,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={`inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${variantClass} ${sizeClass} ${className}`}
+        className={`inline-flex items-center justify-center rounded-2xl font-bold tracking-wide backdrop-blur-sm transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-95 ${variantClass} ${sizeClass} ${className}`}
         {...props}
       >
         {children}

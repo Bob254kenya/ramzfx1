@@ -43,7 +43,10 @@ const FreeBots = observer(() => {
             "Mathews' speed bot.xml",
             'Printed_dollars_Bot.xml',
             'TC Bot 1.1.xml',
-            'legoospeedbot.xml',
+            'TWO ENTRY BOT  MANUALLY  (1).xml',
+            'VEVO_BEST MINER_Bot (1).xml',
+            'WEALTH COMPLEX OVER 3 (1) (1).xml',
+            
         ];
     };
 
