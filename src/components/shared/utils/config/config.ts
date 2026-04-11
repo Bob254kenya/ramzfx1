@@ -55,6 +55,9 @@ export const getDefaultAppIdAndUrl = () => {
 };
 
 export const getAppId = () => {
+    if (process.env.VITE_DERIV_APP_ID) {
+        return process.env.VITE_DERIV_APP_ID;
+    }
     let app_id = null;
     const current_domain = getCurrentProductionDomain() ?? '';
 
