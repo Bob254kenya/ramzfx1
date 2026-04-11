@@ -158,7 +158,7 @@ const AppLoader: React.FC<AppLoaderProps> = ({ onLoadingComplete, duration = 600
         onMouseLeave={handleMouseLeave}
       >
         <div className="logo">
-          <div className="logo-main">RAMZFX</div>
+          <div className="logo-main">DESSFX</div>
           <div className="logo-sub">TRADINGHUB</div>
         </div>
         
