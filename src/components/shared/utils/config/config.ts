@@ -4,7 +4,7 @@ import { isStaging } from '../url/helpers';
 export const APP_IDS = {
     LOCALHOST: 36300,
     STAGING: 29934,
-    PRODUCTION: 132580,
+    PRODUCTION: 132875,
 };
 
 export const livechat_license_id = 12049137;
