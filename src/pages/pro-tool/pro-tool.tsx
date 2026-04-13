@@ -1,1508 +1,738 @@
-// ProTool.tsx - Digit Circle Analysis Tool
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { observer } from 'mobx-react-lite';
-import { motion } from 'framer-motion';
-import { Activity, Wifi, WifiOff } from 'lucide-react';
-import { generateDerivApiInstance, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
-import { useStore } from '@/hooks/useStore';
-import './pro-tool.scss';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-// ==================== TYPES ====================
-interface Symbol {
-  symbol: string;
-  display_name: string;
-  market_type: 'volatility' | 'jump' | 'bearbull' | 'step' | 'range';
-}
-
-interface DigitHistory {
-  digit: number;
-  timestamp: number;
-  price: number;
-}
-
-interface DigitStats {
-  frequency: Record<number, number>;
-  percentages: Record<number, number>;
-  mostCommon: number;
-  leastCommon: number;
-  totalTicks: number;
-  evenPercentage: number;
-  oddPercentage: number;
-  overPercentage: number;
-  underPercentage: number;
-}
-
-// ==================== MARKET LISTS ====================
-const VOLATILITY_1S_MARKETS = ['1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ100V'];
-const VOLATILITY_MARKETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
-const JUMP_MARKETS = ['JD10', 'JD25', 'JD50', 'JD75', 'JD100'];
-const BEAR_BULL_MARKETS = ['RDBEAR', 'RDBULL'];
-const STEP_MARKETS = ['stpRNG'];
-const RANGE_MARKETS = ['RBRK100', 'RBRK200'];
-
-const ALL_MARKETS = [
-  ...VOLATILITY_1S_MARKETS,
-  ...VOLATILITY_MARKETS,
-  ...JUMP_MARKETS,
-  ...BEAR_BULL_MARKETS,
-  ...STEP_MARKETS,
-  ...RANGE_MARKETS,
-];
-
-// Market display names
-const MARKET_NAMES: Record<string, string> = {
-  '1HZ10V': 'Vol 10 (1s)', '1HZ15V': 'Vol 15 (1s)', '1HZ25V': 'Vol 25 (1s)',
-  '1HZ30V': 'Vol 30 (1s)', '1HZ50V': 'Vol 50 (1s)', '1HZ75V': 'Vol 75 (1s)', '1HZ100V': 'Vol 100 (1s)',
-  'R_10': 'Vol 10', 'R_25': 'Vol 25', 'R_50': 'Vol 50', 'R_75': 'Vol 75', 'R_100': 'Vol 100',
-  'JD10': 'Jump 10', 'JD25': 'Jump 25', 'JD50': 'Jump 50', 'JD75': 'Jump 75', 'JD100': 'Jump 100',
-  'RDBEAR': 'Bear', 'RDBULL': 'Bull', 'stpRNG': 'Step', 'RBRK100': 'Range 100', 'RBRK200': 'Range 200',
+// ==================== STYLES (CSS-in-JS) ====================
+const styles = {
+  container: {
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #0B0F1C 0%, #0F172A 100%)',
+    padding: '24px',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '28px',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  title: {
+    fontSize: '28px',
+    fontWeight: '700',
+    background: 'linear-gradient(135deg, #60A5FA, #C084FC)',
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+    letterSpacing: '-0.3px',
+  },
+  badge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    borderRadius: '40px',
+    background: '#1E293B',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#CBD5E1',
+  },
+  dot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#22C55E',
+    boxShadow: '0 0 6px #22C55E',
+  },
+  statusBar: {
+    background: '#1E293B',
+    borderRadius: '20px',
+    padding: '12px 20px',
+    marginBottom: '28px',
+    border: '1px solid #334155',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
+  statusText: {
+    fontSize: '14px',
+    color: '#94A3B8',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '300px 1fr 340px',
+    gap: '24px',
+  },
+  card: {
+    background: '#1E293B',
+    borderRadius: '28px',
+    border: '1px solid #334155',
+    padding: '20px',
+    backdropFilter: 'blur(2px)',
+  },
+  cardTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    borderBottom: '1px solid #334155',
+    paddingBottom: '12px',
+  },
+  marketGroup: {
+    marginBottom: '20px',
+  },
+  groupLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: '0.5px',
+    marginBottom: '10px',
+  },
+  buttonGroup: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  marketBtn: {
+    background: '#0F172A',
+    border: '1px solid #334155',
+    borderRadius: '40px',
+    padding: '6px 14px',
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#CBD5E1',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  activeMarketBtn: {
+    background: '#3B82F6',
+    borderColor: '#3B82F6',
+    color: 'white',
+    boxShadow: '0 0 8px rgba(59,130,246,0.5)',
+  },
+  digitCircleWrapper: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'column',
+  },
+  svgContainer: {
+    width: '100%',
+    maxWidth: '360px',
+    margin: '0 auto',
+  },
+  lastDigitBox: {
+    marginTop: '20px',
+    textAlign: 'center',
+  },
+  lastDigitLabel: {
+    fontSize: '12px',
+    color: '#64748B',
+  },
+  lastDigitValue: {
+    fontSize: '48px',
+    fontWeight: '800',
+    fontFamily: 'monospace',
+    background: 'linear-gradient(135deg, #EF4444, #F97316)',
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+  },
+  statsGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  statBox: {
+    background: '#0F172A',
+    borderRadius: '20px',
+    padding: '16px',
+  },
+  statTitle: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: '14px',
+  },
+  freqBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginBottom: '8px',
+    fontSize: '13px',
+  },
+  barBg: {
+    flex: 1,
+    height: '24px',
+    background: '#1E293B',
+    borderRadius: '12px',
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: '12px',
+    transition: 'width 0.3s ease',
+  },
+  digitCircles: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '10px',
+    marginTop: '12px',
+  },
+  miniCircle: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: '700',
+    fontSize: '16px',
+    fontFamily: 'monospace',
+    background: '#0F172A',
+    border: '1px solid #334155',
+  },
+  controlRow: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '20px',
+    flexWrap: 'wrap',
+  },
+  input: {
+    background: '#0F172A',
+    border: '1px solid #334155',
+    borderRadius: '40px',
+    padding: '8px 16px',
+    color: '#F1F5F9',
+    fontSize: '14px',
+    flex: 1,
+  },
+  button: {
+    background: '#3B82F6',
+    border: 'none',
+    borderRadius: '40px',
+    padding: '8px 20px',
+    color: 'white',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: '0.2s',
+  },
+  stopBtn: {
+    background: '#EF4444',
+  },
+  connectionInfo: {
+    fontSize: '12px',
+    color: '#22C55E',
+  },
+  @media (maxWidth: '1000px') {
+    grid: {
+      gridTemplateColumns: '1fr',
+    }
+  }
 };
 
-// ==================== DIGIT CIRCLE COMPONENT ====================
-interface DigitCircleProps {
-  lastDigit: number | null;
-  onDigitSelect?: (digit: number) => void;
-  selectedDigit?: number;
-  frequencies: Record<number, number>;
-}
-
-const DigitCircle: React.FC<DigitCircleProps> = ({ 
-  lastDigit, 
-  onDigitSelect, 
-  selectedDigit, 
-  frequencies 
-}) => {
+// ==================== DIGIT CIRCLE SVG COMPONENT ====================
+const DigitCircle = ({ lastDigit, selectedDigit, onSelectDigit, percentages }) => {
   const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-  const radius = 140;
+  const radius = 130;
   const center = 160;
   
-  const maxFreq = Math.max(...Object.values(frequencies), 1);
-  
-  const getPosition = (index: number, total: number) => {
+  const getPosition = (index, total) => {
     const angle = (index * 360 / total) - 90;
-    const radian = (angle * Math.PI) / 180;
-    const x = center + radius * Math.cos(radian);
-    const y = center + radius * Math.sin(radian);
-    return { x, y, angle };
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: center + radius * Math.cos(rad),
+      y: center + radius * Math.sin(rad),
+    };
   };
 
+  // Find highest and lowest digit percentages
+  let maxDigit = -1, minDigit = -1;
+  if (percentages) {
+    let maxP = -1, minP = 101;
+    digits.forEach(d => {
+      const p = percentages[d] || 0;
+      if (p > maxP) { maxP = p; maxDigit = d; }
+      if (p < minP) { minP = p; minDigit = d; }
+    });
+  }
+
   return (
-    <div className="digit-circle-container">
-      <svg width="320" height="320" viewBox="0 0 320 320" className="digit-circle-svg">
+    <div style={{ textAlign: 'center' }}>
+      <svg width="320" height="320" viewBox="0 0 320 320">
         <defs>
-          <linearGradient id="circleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" />
-            <stop offset="50%" stopColor="#a855f7" />
-            <stop offset="100%" stopColor="#06b6d4" />
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#A855F7" />
           </linearGradient>
           <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-          <filter id="pulseGlow">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
-        
-        {/* Outer decorative ring */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius + 15}
-          fill="none"
-          stroke="rgba(59,130,246,0.1)"
-          strokeWidth="1.5"
-          strokeDasharray="4 6"
-        />
-        
-        {/* Main circle */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="rgba(15,25,45,0.95)"
-          stroke="url(#circleGradient)"
-          strokeWidth="2.5"
-        />
-        
-        {/* Inner decorative ring */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius - 25}
-          fill="none"
-          stroke="rgba(59,130,246,0.08)"
-          strokeWidth="1"
-        />
-        
-        {/* Center display */}
-        <circle
-          cx={center}
-          cy={center}
-          r="32"
-          fill="rgba(59,130,246,0.12)"
-          stroke="rgba(59,130,246,0.3)"
-          strokeWidth="1.5"
-        />
-        <text
-          x={center}
-          y={center - 2}
-          textAnchor="middle"
-          fill="#60a5fa"
-          fontSize="11"
-          fontWeight="bold"
-          letterSpacing="1"
-        >
-          DIGIT
-        </text>
-        <text
-          x={center}
-          y={center + 14}
-          textAnchor="middle"
-          fill="#94a3b8"
-          fontSize="8"
-        >
-          ANALYSIS
-        </text>
-        
-        {/* Digit nodes on circle */}
+        <circle cx={center} cy={center} r={radius + 8} fill="none" stroke="#2D3A5E" strokeWidth="1.5" strokeDasharray="4 6" />
+        <circle cx={center} cy={center} r={radius} fill="#0F172A" stroke="url(#ringGrad)" strokeWidth="2.5" />
+        <circle cx={center} cy={center} r="28" fill="rgba(59,130,246,0.15)" stroke="#3B82F6" strokeWidth="1" />
+        <text x={center} y={center + 5} textAnchor="middle" fill="#60A5FA" fontSize="11" fontWeight="bold">DIGIT</text>
+
         {digits.map((digit, idx) => {
           const { x, y } = getPosition(idx, digits.length);
           const isLast = lastDigit === digit;
           const isSelected = selectedDigit === digit;
-          const freq = frequencies[digit] || 0;
-          const freqPercent = (freq / maxFreq) * 100;
+          const isHighest = maxDigit === digit && percentages;
+          const isLowest = minDigit === digit && percentages;
           
-          // Dynamic sizing based on frequency
-          const nodeSize = 18 + (freqPercent / 100) * 8;
-          
+          let bgColor = '#1E293B';
+          let strokeColor = '#475569';
+          if (isSelected) { bgColor = 'rgba(59,130,246,0.4)'; strokeColor = '#3B82F6'; }
+          else if (isHighest) { bgColor = 'rgba(34,197,94,0.3)'; strokeColor = '#22C55E'; }
+          else if (isLowest) { bgColor = 'rgba(239,68,68,0.3)'; strokeColor = '#EF4444'; }
+          else if (isLast) { bgColor = 'rgba(239,68,68,0.2)'; strokeColor = '#EF4444'; }
+
           return (
-            <g
-              key={digit}
-              onClick={() => onDigitSelect?.(digit)}
-              style={{ cursor: onDigitSelect ? 'pointer' : 'default' }}
-            >
-              {/* Frequency ring */}
-              <circle
-                cx={x}
-                cy={y}
-                r={nodeSize + 3}
-                fill="none"
-                stroke={`rgba(59,130,246,${0.2 + (freqPercent / 100) * 0.5})`}
-                strokeWidth="1.5"
-                strokeDasharray={`${freqPercent} 100`}
-                transform={`rotate(${idx * 36}, ${x}, ${y})`}
-                style={{ transition: 'all 0.3s ease' }}
-              />
-              
-              {/* Glow for last digit */}
-              {isLast && (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={nodeSize + 8}
-                  fill="rgba(239,68,68,0.2)"
-                  filter="url(#pulseGlow)"
-                >
-                  <animate
-                    attributeName="r"
-                    values={`${nodeSize + 4};${nodeSize + 12};${nodeSize + 4}`}
-                    dur="1.5s"
-                    repeatCount="indefinite"
-                  />
-                  <animate
-                    attributeName="opacity"
-                    values="0.3;0.6;0.3"
-                    dur="1.5s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
+            <g key={digit} onClick={() => onSelectDigit?.(digit)} style={{ cursor: 'pointer' }}>
+              <circle cx={x} cy={y} r="22" fill={bgColor} stroke={strokeColor} strokeWidth="2" />
+              <text x={x} y={y + 5} textAnchor="middle" fill={isLast ? '#EF4444' : '#CBD5E1'} fontSize="15" fontWeight={isLast ? 'bold' : '600'}>{digit}</text>
+              {percentages && (
+                <text x={x} y={y + 20} textAnchor="middle" fill="#64748B" fontSize="8">{percentages[digit]?.toFixed(0) || 0}%</text>
               )}
-              
-              {/* Selected glow */}
-              {isSelected && !isLast && (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={nodeSize + 5}
-                  fill="rgba(59,130,246,0.15)"
-                  filter="url(#glow)"
-                />
-              )}
-              
-              {/* Digit circle */}
-              <circle
-                cx={x}
-                cy={y}
-                r={nodeSize}
-                fill={isSelected ? "rgba(59,130,246,0.25)" : (isLast ? "rgba(239,68,68,0.2)" : "rgba(30,45,65,0.9)")}
-                stroke={isSelected ? "#3b82f6" : (isLast ? "#ef4444" : "rgba(59,130,246,0.5)")}
-                strokeWidth={isLast || isSelected ? "2.5" : "1.5"}
-                style={{ transition: 'all 0.2s ease' }}
-              />
-              
-              {/* Digit text */}
-              <text
-                x={x}
-                y={y + 5}
-                textAnchor="middle"
-                fill={isLast ? "#ef4444" : (isSelected ? "#60a5fa" : "#cbd5e1")}
-                fontSize={isLast ? "18" : "15"}
-                fontWeight={isLast ? "bold" : "600"}
-                fontFamily="monospace"
-              >
-                {digit}
-              </text>
             </g>
           );
         })}
-        
-        {/* Dynamic arrow pointing to last digit */}
-        {lastDigit !== null && (() => {
-          const idx = lastDigit;
-          const { x, y, angle } = getPosition(idx, 10);
-          const arrowAngle = angle + 180;
-          const arrowX = center + (radius - 40) * Math.cos((arrowAngle * Math.PI) / 180);
-          const arrowY = center + (radius - 40) * Math.sin((arrowAngle * Math.PI) / 180);
-          
-          return (
-            <g transform={`translate(${arrowX}, ${arrowY}) rotate(${arrowAngle + 90})`}>
-              <polygon
-                points="0,-20 -10,10 0,4 10,10"
-                fill="#ef4444"
-                stroke="#dc2626"
-                strokeWidth="1"
-                filter="url(#glow)"
-              >
-                <animateTransform
-                  attributeName="transform"
-                  type="translate"
-                  values="0,-3;0,5;0,-3"
-                  dur="0.8s"
-                  repeatCount="indefinite"
-                  additive="sum"
-                />
-              </polygon>
-            </g>
-          );
-        })()}
-        
-        {/* Tick mark indicators */}
-        {[0, 2, 4, 6, 8].map(i => {
-          const angle = (i * 36 - 90) * Math.PI / 180;
-          const x1 = center + (radius + 5) * Math.cos(angle);
-          const y1 = center + (radius + 5) * Math.sin(angle);
-          const x2 = center + (radius + 10) * Math.cos(angle);
-          const y2 = center + (radius + 10) * Math.sin(angle);
-          return (
-            <line
-              key={i}
-              x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke="rgba(59,130,246,0.3)"
-              strokeWidth="1"
-            />
-          );
-        })}
-      </svg>
-      
-      {/* Last digit display */}
-      <div className="last-digit-preview">
-        <span className="label">Last Digit</span>
-        <motion.span
-          key={lastDigit}
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className={`digit-value ${lastDigit !== null ? 'active' : ''}`}
-        >
-          {lastDigit !== null ? lastDigit : '—'}
-        </motion.span>
-      </div>
-    </div>
-  );
-};
 
-// ==================== MARKET SELECTOR ====================
-interface MarketSelectorProps {
-  symbols: Symbol[];
-  selectedSymbol: string;
-  onSymbolChange: (symbol: string) => void;
-  disabled?: boolean;
-}
-
-const MarketSelector: React.FC<MarketSelectorProps> = ({ 
-  symbols, 
-  selectedSymbol, 
-  onSymbolChange,
-  disabled 
-}) => {
-  const groupedSymbols = {
-    'Volatility 1s': symbols.filter(s => VOLATILITY_1S_MARKETS.includes(s.symbol)),
-    'Volatility': symbols.filter(s => VOLATILITY_MARKETS.includes(s.symbol)),
-    'Jump': symbols.filter(s => JUMP_MARKETS.includes(s.symbol)),
-    'Bear/Bull': symbols.filter(s => BEAR_BULL_MARKETS.includes(s.symbol)),
-    'Step & Range': symbols.filter(s => [...STEP_MARKETS, ...RANGE_MARKETS].includes(s.symbol)),
-  };
-
-  return (
-    <div className="market-selector">
-      <div className="selector-header">
-        <Activity size={16} />
-        <span>Market Selection</span>
-      </div>
-      <div className="market-groups">
-        {Object.entries(groupedSymbols).map(([groupName, groupSymbols]) => (
-          groupSymbols.length > 0 && (
-            <div key={groupName} className="market-group">
-              <div className="group-label">{groupName}</div>
-              <div className="market-buttons">
-                {groupSymbols.map(sym => (
-                  <button
-                    key={sym.symbol}
-                    className={`market-btn ${selectedSymbol === sym.symbol ? 'active' : ''}`}
-                    onClick={() => onSymbolChange(sym.symbol)}
-                    disabled={disabled}
-                  >
-                    {sym.display_name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ==================== STATS PANEL ====================
-interface StatsPanelProps {
-  stats: DigitStats;
-  lastDigit: number | null;
-  ticksProcessed: number;
-  recentDigits: number[];
-}
-
-const StatsPanel: React.FC<StatsPanelProps> = ({ 
-  stats, 
-  lastDigit, 
-  ticksProcessed, 
-  recentDigits 
-}) => {
-  const { 
-    frequency, 
-    percentages, 
-    mostCommon, 
-    leastCommon,
-    evenPercentage,
-    oddPercentage,
-    overPercentage,
-    underPercentage
-  } = stats;
-  
-  const maxFreq = Math.max(...Object.values(frequency), 1);
-  
-  return (
-    <div className="stats-panel">
-      {/* Frequency Card */}
-      <div className="stat-card">
-        <div className="stat-title">
-          <span>📊 Digit Frequency</span>
-          <span className="stat-badge">{ticksProcessed} ticks</span>
-        </div>
-        <div className="frequency-bars">
-          {Array.from({ length: 10 }, (_, i) => {
-            const freq = frequency[i] || 0;
-            const pct = percentages[i] || 0;
-            const barWidth = (freq / maxFreq) * 100;
-            
+        {/* Animated arrow pointing to last digit */}
+        {lastDigit !== null && (
+          (() => {
+            const idx = lastDigit;
+            const { x, y } = getPosition(idx, 10);
+            const angle = (idx * 36) - 90;
+            const rad = (angle * Math.PI) / 180;
+            const arrowX = center + (radius - 38) * Math.cos(rad);
+            const arrowY = center + (radius - 38) * Math.sin(rad);
             return (
-              <div key={i} className="freq-item">
-                <span className={`digit-label ${lastDigit === i ? 'last' : ''}`}>{i}</span>
-                <div className="bar-container">
-                  <div 
-                    className={`freq-bar ${lastDigit === i ? 'last' : ''} ${i === mostCommon ? 'most' : ''} ${i === leastCommon ? 'least' : ''}`}
-                    style={{ width: `${barWidth}%` }}
-                  />
-                </div>
-                <span className="freq-value">{freq}</span>
-                <span className="freq-pct">{pct.toFixed(1)}%</span>
-              </div>
+              <g transform={`translate(${arrowX}, ${arrowY}) rotate(${angle + 90})`}>
+                <polygon points="0,-14 -6,6 0,2 6,6" fill="#EF4444" stroke="#DC2626" strokeWidth="1">
+                  <animateTransform attributeName="transform" type="translate" values="0,-3;0,4;0,-3" dur="0.8s" repeatCount="indefinite" additive="sum" />
+                </polygon>
+              </g>
             );
-          })}
-        </div>
-      </div>
-      
-      {/* Summary Card */}
-      <div className="stat-card">
-        <div className="stat-title">📈 Summary</div>
-        <div className="summary-grid">
-          <div className="summary-item">
-            <span className="summary-label">Most Common</span>
-            <span className="summary-value highlight">{mostCommon}</span>
-            <span className="summary-sub">{percentages[mostCommon]?.toFixed(1)}%</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Least Common</span>
-            <span className="summary-value">{leastCommon}</span>
-            <span className="summary-sub">{percentages[leastCommon]?.toFixed(1)}%</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Even/Odd</span>
-            <span className={`summary-value ${evenPercentage > 50 ? 'even' : 'odd'}`}>
-              {evenPercentage > 50 ? 'EVEN' : 'ODD'}
-            </span>
-            <span className="summary-sub">
-              {evenPercentage.toFixed(1)}% / {oddPercentage.toFixed(1)}%
-            </span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Over/Under 4</span>
-            <span className={`summary-value ${overPercentage > 50 ? 'over' : 'under'}`}>
-              {overPercentage > 50 ? 'OVER' : 'UNDER'}
-            </span>
-            <span className="summary-sub">
-              {overPercentage.toFixed(1)}% / {underPercentage.toFixed(1)}%
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Recent Digits Card */}
-      <div className="stat-card">
-        <div className="stat-title">🔄 Recent Digits</div>
-        <div className="recent-digits">
-          {recentDigits.slice(-20).map((digit, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: idx * 0.02 }}
-              className={`recent-digit ${digit === lastDigit ? 'last' : ''} ${
-                digit % 2 === 0 ? 'even' : 'odd'
-              }`}
-            >
-              {digit}
-            </motion.div>
-          ))}
-          {recentDigits.length === 0 && (
-            <span className="no-data">Waiting for ticks...</span>
-          )}
-        </div>
+          })()
+        )}
+      </svg>
+      <div style={styles.lastDigitBox}>
+        <div style={styles.lastDigitLabel}>LAST DIGIT</div>
+        <div style={styles.lastDigitValue}>{lastDigit !== null ? lastDigit : '—'}</div>
       </div>
     </div>
   );
 };
 
 // ==================== MAIN COMPONENT ====================
-const TradeUiClone = observer(() => {
-  const { run_panel } = useStore();
-  const apiRef = useRef<any>(null);
-  const tickStreamIdRef = useRef<string | null>(null);
-  const tickCallbackRef = useRef<((data: any) => void) | null>(null);
+const TradeUiClone = () => {
+  const [symbol, setSymbol] = useState('R_10');      // Volatility 10 (1s) index
+  const [ticks, setTicks] = useState([]);
+  const [maxTicks, setMaxTicks] = useState(1000);
+  const [isRunning, setIsRunning] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [lastDigit, setLastDigit] = useState(null);
+  const [selectedDigit, setSelectedDigit] = useState(null);
+  const [digitStats, setDigitStats] = useState(Array(10).fill(0));
+  const [evenOdd, setEvenOdd] = useState({ even: 0, odd: 0 });
+  const [riseFall, setRiseFall] = useState({ rise: 0, fall: 0, unchanged: 0 });
+  const [underOver5, setUnderOver5] = useState({ under: 0, over: 0 });
+  const [percentages, setPercentages] = useState(Array(10).fill(0));
   
-  // State
-  const [symbols, setSymbols] = useState<Symbol[]>([]);
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('R_100');
-  const [lastDigit, setLastDigit] = useState<number | null>(null);
-  const [ticksProcessed, setTicksProcessed] = useState(0);
-  const [digitsHistory, setDigitsHistory] = useState<DigitHistory[]>([]);
-  const [status, setStatus] = useState('Initializing...');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedPredictionDigit, setSelectedPredictionDigit] = useState<number | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Calculate stats
-  const calculateStats = useCallback((): DigitStats => {
-    const history = digitsHistory;
-    const frequency: Record<number, number> = {};
-    for (let i = 0; i <= 9; i++) frequency[i] = 0;
-    
-    history.forEach(h => frequency[h.digit]++);
-    
-    const total = history.length || 1;
-    const percentages: Record<number, number> = {};
-    for (let i = 0; i <= 9; i++) {
-      percentages[i] = (frequency[i] / total) * 100;
-    }
-    
-    let mostCommon = 0;
-    let leastCommon = 0;
-    let maxFreq = 0;
-    let minFreq = Infinity;
-    
-    for (let i = 0; i <= 9; i++) {
-      if (frequency[i] > maxFreq) {
-        maxFreq = frequency[i];
-        mostCommon = i;
-      }
-      if (frequency[i] < minFreq) {
-        minFreq = frequency[i];
-        leastCommon = i;
-      }
-    }
-    
-    const evenCount = history.filter(h => h.digit % 2 === 0).length;
-    const oddCount = history.length - evenCount;
-    const overCount = history.filter(h => h.digit > 4).length;
-    const underCount = history.length - overCount;
-    
-    return {
-      frequency,
-      percentages,
-      mostCommon,
-      leastCommon,
-      totalTicks: history.length,
-      evenPercentage: history.length > 0 ? (evenCount / history.length) * 100 : 50,
-      oddPercentage: history.length > 0 ? (oddCount / history.length) * 100 : 50,
-      overPercentage: history.length > 0 ? (overCount / history.length) * 100 : 50,
-      underPercentage: history.length > 0 ? (underCount / history.length) * 100 : 50,
+  const wsRef = useRef(null);
+  const tickBufferRef = useRef([]);
+
+  // Helper: get symbol code for Deriv API
+  const getSymbolCode = (sym) => {
+    const map = {
+      'R_10': '1HZ10V',
+      'R_25': '1HZ25V',
+      'R_50': '1HZ50V',
+      'R_75': '1HZ75V',
+      'R_100': '1HZ100V',
+      '1S_10': '1S10V',
+      '1S_25': '1S25V',
+      '1S_50': '1S50V',
     };
-  }, [digitsHistory]);
-  
-  const stats = calculateStats();
-  const recentDigits = digitsHistory.slice(-20).map(h => h.digit);
-  
-  // Helper to get last digit from price
-  const getLastDigitFromPrice = (price: number): number => {
-    return Number(String(price).slice(-1));
+    return map[sym] || '1HZ10V';
   };
-  
-  // Get display name
-  const getDisplayName = (sym: string): string => {
-    return MARKET_NAMES[sym] || sym;
-  };
-  
-  // Stop tick stream
-  const stopTicks = useCallback(() => {
-    if (tickStreamIdRef.current && apiRef.current) {
-      try {
-        apiRef.current.forget?.({ forget: tickStreamIdRef.current });
-      } catch (e) {
-        console.warn('Error forgetting subscription:', e);
-      }
-      tickStreamIdRef.current = null;
-    }
+
+  // Analyze ticks array
+  const analyzeTicks = useCallback((tickList) => {
+    if (tickList.length === 0) return;
     
-    if (tickCallbackRef.current && apiRef.current?.connection) {
-      apiRef.current.connection.removeEventListener('message', tickCallbackRef.current);
-      tickCallbackRef.current = null;
+    // Extract last digit from each tick price
+    const lastDigits = tickList.map(tick => {
+      const price = tick.quote;
+      const digit = Math.abs(Math.floor(price) % 10);
+      return digit;
+    });
+    
+    // Frequency 0-9
+    const freq = Array(10).fill(0);
+    lastDigits.forEach(d => freq[d]++);
+    const total = lastDigits.length;
+    const percent = freq.map(f => (f / total) * 100);
+    setPercentages(percent);
+    setDigitStats(freq);
+    
+    // Even vs Odd
+    let evenCount = 0, oddCount = 0;
+    lastDigits.forEach(d => {
+      if (d % 2 === 0) evenCount++;
+      else oddCount++;
+    });
+    setEvenOdd({ even: (evenCount/total)*100, odd: (oddCount/total)*100 });
+    
+    // Rise vs Fall (compare consecutive ticks)
+    let rise = 0, fall = 0, unchanged = 0;
+    for (let i = 1; i < tickList.length; i++) {
+      const prev = tickList[i-1].quote;
+      const curr = tickList[i].quote;
+      if (curr > prev) rise++;
+      else if (curr < prev) fall++;
+      else unchanged++;
     }
+    const totalComp = rise + fall + unchanged;
+    setRiseFall({
+      rise: totalComp ? (rise/totalComp)*100 : 0,
+      fall: totalComp ? (fall/totalComp)*100 : 0,
+      unchanged: totalComp ? (unchanged/totalComp)*100 : 0
+    });
+    
+    // Under 5 vs Over 5 (digit 0-4 vs 5-9)
+    let under = 0, over = 0;
+    lastDigits.forEach(d => {
+      if (d < 5) under++;
+      else over++;
+    });
+    setUnderOver5({ under: (under/total)*100, over: (over/total)*100 });
   }, []);
-  
-  // Start tick stream for a symbol
-  const startTicks = useCallback(async (sym: string) => {
-    stopTicks();
-    setDigitsHistory([]);
-    setLastDigit(null);
-    setTicksProcessed(0);
-    setError(null);
-    setStatus(`Connecting to ${getDisplayName(sym)}...`);
-    
-    try {
-      const api = apiRef.current;
-      if (!api) {
-        throw new Error('API not initialized');
-      }
-      
-      // Ensure authorized
-      const token = V2GetActiveToken();
-      if (token) {
-        try {
-          await api.authorize(token);
-        } catch (e) {
-          // Continue without auth for ticks
-        }
-      }
-      
-      // Subscribe to ticks
-      const { subscription, error: subError } = await api.send({ 
-        ticks: sym, 
-        subscribe: 1 
-      });
-      
-      if (subError) throw new Error(subError.message || 'Subscription failed');
-      if (subscription?.id) {
-        tickStreamIdRef.current = subscription.id;
-      }
-      
-      // Create message handler
-      const onTickMessage = (evt: MessageEvent) => {
-        try {
-          const data = JSON.parse(evt.data);
-          
-          if (data?.msg_type === 'tick' && data?.tick?.symbol === sym) {
-            const quote = data.tick.quote;
-            const digit = getLastDigitFromPrice(quote);
-            const timestamp = Date.now();
-            
-            setLastDigit(digit);
-            setDigitsHistory(prev => {
-              const newHistory = [...prev, { digit, timestamp, price: quote }];
-              // Keep last 500 ticks
-              return newHistory.slice(-500);
-            });
-            setTicksProcessed(prev => prev + 1);
-            setStatus(`${getDisplayName(sym)} • ${quote.toFixed(4)} • Digit ${digit}`);
-            setIsConnected(true);
-            setError(null);
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      };
-      
-      tickCallbackRef.current = onTickMessage;
-      api.connection.addEventListener('message', onTickMessage);
-      
-      // Also get some historical ticks for immediate data
-      try {
-        const { ticks_history, error: histError } = await api.send({ 
-          ticks_history: sym, 
-          count: 100,
-          end: 'latest'
-        });
-        
-        if (!histError && ticks_history?.prices) {
-          const prices = ticks_history.prices;
-          const times = ticks_history.times || [];
-          
-          const historyData: DigitHistory[] = prices.map((price: number, i: number) => ({
-            digit: getLastDigitFromPrice(price),
-            timestamp: times[i] ? times[i] * 1000 : Date.now() - (prices.length - i) * 1000,
-            price,
-          }));
-          
-          setDigitsHistory(historyData);
-          if (historyData.length > 0) {
-            setLastDigit(historyData[historyData.length - 1].digit);
-          }
-          setTicksProcessed(historyData.length);
-        }
-      } catch (e) {
-        console.warn('Could not fetch historical ticks:', e);
-      }
-      
-      setStatus(`Streaming ${getDisplayName(sym)}...`);
-      setIsLoading(false);
-      
-    } catch (e: any) {
-      console.error('startTicks error:', e);
-      setError(e?.message || 'Failed to connect');
-      setStatus(`Error: ${e?.message || 'Connection failed'}`);
-      setIsConnected(false);
-      setIsLoading(false);
-    }
-  }, [stopTicks]);
-  
-  // Initialize API and load symbols
+
+  // Update stats when ticks change
   useEffect(() => {
-    const api = generateDerivApiInstance();
-    apiRef.current = api;
+    if (ticks.length > 0) {
+      analyzeTicks(ticks);
+      // update last digit
+      const latest = ticks[ticks.length-1];
+      if (latest) {
+        const digit = Math.abs(Math.floor(latest.quote) % 10);
+        setLastDigit(digit);
+      }
+    }
+  }, [ticks, analyzeTicks]);
+
+  // WebSocket connection and tick subscription
+  useEffect(() => {
+    if (!isRunning) {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        // unsubscribe
+        wsRef.current.close();
+      }
+      setConnectionStatus('Stopped');
+      return;
+    }
+
+    const wsUrl = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
     
-    const init = async () => {
+    ws.onopen = () => {
+      setConnectionStatus('Connected');
+      const symbolCode = getSymbolCode(symbol);
+      const subscribeMsg = {
+        ticks: symbolCode,
+        subscribe: 1
+      };
+      ws.send(JSON.stringify(subscribeMsg));
+    };
+    
+    ws.onmessage = (event) => {
       try {
-        setIsLoading(true);
-        setStatus('Fetching available markets...');
-        
-        // Get active symbols
-        const { active_symbols, error: asErr } = await api.send({ active_symbols: 'brief' });
-        
-        if (asErr) throw new Error(asErr.message);
-        
-        const availableSymbols = (active_symbols || [])
-          .filter((s: any) => ALL_MARKETS.includes(s.symbol))
-          .map((s: any) => ({
-            symbol: s.symbol,
-            display_name: getDisplayName(s.symbol),
-            market_type: VOLATILITY_1S_MARKETS.includes(s.symbol) ? 'volatility' :
-                        VOLATILITY_MARKETS.includes(s.symbol) ? 'volatility' :
-                        JUMP_MARKETS.includes(s.symbol) ? 'jump' : 'bearbull'
-          }));
-        
-        // Fill missing symbols
-        const finalSymbols = [...availableSymbols];
-        for (const sym of ALL_MARKETS) {
-          if (!finalSymbols.find(s => s.symbol === sym)) {
-            finalSymbols.push({
-              symbol: sym,
-              display_name: getDisplayName(sym),
-              market_type: 'volatility'
-            });
+        const data = JSON.parse(event.data);
+        if (data.msg_type === 'tick' && data.tick) {
+          const newTick = {
+            quote: data.tick.quote,
+            epoch: data.tick.epoch,
+            symbol: data.tick.symbol
+          };
+          tickBufferRef.current = [newTick, ...tickBufferRef.current];
+          // Keep only maxTicks latest
+          if (tickBufferRef.current.length > maxTicks) {
+            tickBufferRef.current = tickBufferRef.current.slice(0, maxTicks);
           }
+          setTicks([...tickBufferRef.current]);
         }
-        
-        setSymbols(finalSymbols);
-        
-        // Start with default symbol
-        const defaultSymbol = finalSymbols.find(s => s.symbol === 'R_100')?.symbol || finalSymbols[0]?.symbol;
-        if (defaultSymbol) {
-          setSelectedSymbol(defaultSymbol);
-          await startTicks(defaultSymbol);
-        } else {
-          setStatus('No markets available');
-          setIsLoading(false);
+        if (data.error) {
+          console.error('API error:', data.error);
+          setConnectionStatus(`Error: ${data.error.message}`);
         }
-        
-      } catch (e: any) {
-        console.error('Init error:', e);
-        setError(e?.message || 'Initialization failed');
-        setStatus(`Init error: ${e?.message || 'Unknown'}`);
-        setIsConnected(false);
-        setIsLoading(false);
+      } catch (err) {
+        console.warn('Parse error', err);
       }
     };
     
-    init();
+    ws.onerror = (err) => {
+      console.error('WebSocket error', err);
+      setConnectionStatus('Disconnected');
+    };
+    
+    ws.onclose = () => {
+      setConnectionStatus('Disconnected');
+    };
     
     return () => {
-      stopTicks();
-      if (apiRef.current) {
-        apiRef.current.disconnect?.();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
       }
     };
-  }, [startTicks, stopTicks]);
-  
-  // Handle symbol change
-  const handleSymbolChange = useCallback(async (symbol: string) => {
-    setSelectedSymbol(symbol);
-    setIsLoading(true);
-    await startTicks(symbol);
-  }, [startTicks]);
-  
-  // Handle digit selection
-  const handleDigitSelect = (digit: number) => {
-    setSelectedPredictionDigit(digit);
-    setStatus(`Selected digit ${digit} for analysis`);
+  }, [isRunning, symbol, maxTicks]);
+
+  // Change symbol -> reset ticks
+  const handleSymbolChange = (newSym) => {
+    setSymbol(newSym);
+    tickBufferRef.current = [];
+    setTicks([]);
+    setLastDigit(null);
+    setDigitStats(Array(10).fill(0));
+    setPercentages(Array(10).fill(0));
+    // reconnect will happen via effect
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
     setTimeout(() => {
-      if (status.includes('Selected')) {
-        setStatus(`Streaming ${getDisplayName(selectedSymbol)}...`);
+      if (isRunning) {
+        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        wsRef.current = ws;
+        // re-trigger subscription logic (simplified: effect will re-run)
       }
-    }, 2000);
+    }, 100);
   };
-  
-  const currentSymbolDisplay = symbols.find(s => s.symbol === selectedSymbol)?.display_name || selectedSymbol;
-  
+
+  const toggleRunning = () => {
+    setIsRunning(!isRunning);
+    if (!isRunning) {
+      // restart: reset buffer
+      tickBufferRef.current = [];
+      setTicks([]);
+    }
+  };
+
+  const handleMaxTicksChange = (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val > 0 && val <= 5000) {
+      setMaxTicks(val);
+      // Trim current ticks
+      if (tickBufferRef.current.length > val) {
+        tickBufferRef.current = tickBufferRef.current.slice(0, val);
+        setTicks([...tickBufferRef.current]);
+      }
+    }
+  };
+
+  // Get display symbol name
+  const getDisplayName = (sym) => {
+    const names = {
+      'R_10': 'Volatility 10 (1s) Index',
+      'R_25': 'Volatility 25 (1s) Index',
+      'R_50': 'Volatility 50 (1s) Index',
+      'R_75': 'Volatility 75 (1s) Index',
+      'R_100': 'Volatility 100 (1s) Index',
+      '1S_10': 'Jump 10 Index',
+      '1S_25': 'Jump 25 Index',
+      '1S_50': 'Jump 50 Index',
+    };
+    return names[sym] || sym;
+  };
+
+  const currentMarketName = getDisplayName(symbol);
+
   return (
-    <div className="pro-trader pro-trader-analysis">
-      {/* Header */}
-      <div className="analysis-header">
-        <h1>
-          <span className="title-icon">🎯</span>
-          Circle Digit Analysis Tool
-        </h1>
-        <div className={`connection-badge ${isConnected ? 'connected' : 'disconnected'}`}>
-          <span className="dot" />
-          {isConnected ? 'Live Data' : isLoading ? 'Connecting...' : 'Disconnected'}
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>📈 Deriv Synth Analyzer</h1>
+        <div style={styles.badge}>
+          <span style={styles.dot}></span>
+          <span>{connectionStatus === 'Connected' ? 'LIVE DATA' : connectionStatus}</span>
         </div>
       </div>
-      
-      {/* Status Bar */}
-      <div className="status-bar">
-        <div className="status-info">
-          <span className="status-label">Current Market:</span>
-          <strong>{currentSymbolDisplay}</strong>
-          <span className="status-divider">|</span>
-          <span className="status-label">Status:</span>
-          <span className={`status-text ${error ? 'error' : ''}`}>
-            {status}
-          </span>
-          {error && (
-            <>
-              <span className="status-divider">|</span>
-              <button 
-                className="retry-btn"
-                onClick={() => startTicks(selectedSymbol)}
-              >
-                Retry
-              </button>
-            </>
-          )}
+
+      <div style={styles.statusBar}>
+        <div style={styles.statusText}>
+          <strong>Market:</strong> {currentMarketName} &nbsp;|&nbsp;
+          <strong>Ticks stored:</strong> {ticks.length}/{maxTicks} &nbsp;|&nbsp;
+          <strong>Last tick digit:</strong> {lastDigit !== null ? lastDigit : '—'}
         </div>
-      </div>
-      
-      <div className="analysis-layout">
-        {/* Left Panel - Market Selector */}
-        <div className="left-panel">
-          <MarketSelector
-            symbols={symbols}
-            selectedSymbol={selectedSymbol}
-            onSymbolChange={handleSymbolChange}
-            disabled={isLoading}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input 
+            type="number" 
+            value={maxTicks} 
+            onChange={handleMaxTicksChange}
+            min="100"
+            max="5000"
+            step="100"
+            style={{ width: '100px', background: '#0F172A', border: '1px solid #334155', borderRadius: '20px', padding: '6px 12px', color: 'white' }}
           />
-          
-          {/* Info Card */}
-          <div className="info-card">
-            <div className="info-title">📊 How It Works</div>
-            <div className="info-content">
-              <p>The <strong>red arrow</strong> dynamically points to the last digit received.</p>
-              <p>Digits are arranged in a circle. The size of each node reflects its frequency.</p>
-              <p>Click any digit to select it for pattern analysis.</p>
-              <p className="info-tip">💡 Tip: Watch for frequently occurring digits to identify patterns.</p>
+          <button onClick={toggleRunning} style={{ ...styles.button, ...(!isRunning ? {} : styles.stopBtn), background: isRunning ? '#EF4444' : '#22C55E' }}>
+            {isRunning ? '⏸ Stop' : '▶ Start'}
+          </button>
+        </div>
+      </div>
+
+      <div style={styles.grid}>
+        {/* LEFT PANEL - MARKET SELECTOR & CONTROLS */}
+        <div style={styles.card}>
+          <div style={styles.cardTitle}>🎯 Volatility Indices</div>
+          <div style={styles.marketGroup}>
+            <div style={styles.groupLabel}>VOLATILITY (1s)</div>
+            <div style={styles.buttonGroup}>
+              {['R_10', 'R_25', 'R_50', 'R_75', 'R_100'].map(s => (
+                <button
+                  key={s}
+                  onClick={() => handleSymbolChange(s)}
+                  style={{ ...styles.marketBtn, ...(symbol === s ? styles.activeMarketBtn : {}) }}
+                >
+                  {s.replace('R_', 'Vol ')} 
+                </button>
+              ))}
             </div>
           </div>
-          
-          {/* Quick Stats */}
-          <div className="info-card">
-            <div className="info-title">⚡ Quick Stats</div>
-            <div className="quick-stats">
-              <div className="quick-stat-item">
-                <span>Total Ticks</span>
-                <strong>{ticksProcessed}</strong>
-              </div>
-              <div className="quick-stat-item">
-                <span>Most Common</span>
-                <strong className="highlight">{stats.mostCommon}</strong>
-              </div>
-              <div className="quick-stat-item">
-                <span>Even/Odd</span>
-                <strong className={stats.evenPercentage > 50 ? 'even' : 'odd'}>
-                  {stats.evenPercentage > 50 ? 'EVEN' : 'ODD'}
-                </strong>
-              </div>
+          <div style={styles.marketGroup}>
+            <div style={styles.groupLabel}>JUMP INDICES</div>
+            <div style={styles.buttonGroup}>
+              {['1S_10', '1S_25', '1S_50'].map(s => (
+                <button
+                  key={s}
+                  onClick={() => handleSymbolChange(s)}
+                  style={{ ...styles.marketBtn, ...(symbol === s ? styles.activeMarketBtn : {}) }}
+                >
+                  {s.replace('1S_', 'Jump ')}
+                </button>
+              ))}
             </div>
+          </div>
+          <div style={{ marginTop: '20px', fontSize: '12px', color: '#64748B', borderTop: '1px solid #334155', paddingTop: '16px' }}>
+            <div>📊 <strong>Analysis Info</strong></div>
+            <div style={{ marginTop: '8px' }}>• Highest digit → <span style={{ color: '#22C55E' }}>Green</span></div>
+            <div>• Lowest digit → <span style={{ color: '#EF4444' }}>Red</span></div>
+            <div>• Selected digit → <span style={{ color: '#3B82F6' }}>Blue</span></div>
+            <div>• Red arrow → points to last digit</div>
           </div>
         </div>
-        
-        {/* Center Panel - Digit Circle */}
-        <div className="center-panel">
-          <div className="circle-card">
-            <div className="circle-header">
-              <span className="badge">LIVE DIGIT ANALYSIS</span>
-              <span className="tick-counter">{ticksProcessed} ticks</span>
-            </div>
-            
-            {isLoading && digitsHistory.length === 0 ? (
-              <div className="loading-placeholder">
-                <div className="loading-spinner" />
-                <span>Loading market data...</span>
-              </div>
-            ) : (
-              <DigitCircle
-                lastDigit={lastDigit}
-                onDigitSelect={handleDigitSelect}
-                selectedDigit={selectedPredictionDigit}
-                frequencies={stats.frequency}
-              />
-            )}
-            
-            <div className="arrow-legend">
-              <div className="legend-item">
-                <div className="red-arrow-sample" />
-                <span>Moving arrow → points to last digit</span>
-              </div>
-              <div className="legend-item">
-                <div className="size-indicator">
-                  <span className="size-dot small" />
-                  <span className="size-dot medium" />
-                  <span className="size-dot large" />
-                </div>
-                <span>Node size = frequency</span>
-              </div>
-            </div>
+
+        {/* CENTER PANEL - DIGIT CIRCLE */}
+        <div style={{ ...styles.card, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '100%', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ background: '#3B82F6', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' }}>LIVE DIGIT MAP</span>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>1000 ticks rolling</span>
           </div>
-        </div>
-        
-        {/* Right Panel - Stats */}
-        <div className="right-panel">
-          <StatsPanel
-            stats={stats}
+          <DigitCircle 
             lastDigit={lastDigit}
-            ticksProcessed={ticksProcessed}
-            recentDigits={recentDigits}
+            selectedDigit={selectedDigit}
+            onSelectDigit={(d) => setSelectedDigit(d)}
+            percentages={percentages}
           />
+          <div style={{ marginTop: '12px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+            💡 Click any digit to highlight (blue)
+          </div>
+        </div>
+
+        {/* RIGHT PANEL - STATISTICS SECTION */}
+        <div style={styles.statsGrid}>
+          {/* Digit frequency bars */}
+          <div style={styles.card}>
+            <div style={styles.cardTitle}>🔢 Digit Frequency (0-9)</div>
+            <div>
+              {digitStats.map((freq, i) => {
+                const total = ticks.length || 1;
+                const pct = (freq / total) * 100;
+                let barColor = '#3B82F6';
+                if (percentages[i] === Math.max(...percentages) && percentages[i] > 0) barColor = '#22C55E';
+                if (percentages[i] === Math.min(...percentages.filter(p => p > 0)) && percentages[i] > 0 && Math.min(...percentages) !== Math.max(...percentages)) barColor = '#EF4444';
+                if (selectedDigit === i) barColor = '#3B82F6';
+                return (
+                  <div key={i} style={styles.freqBar}>
+                    <span style={{ width: '24px', fontWeight: 'bold', color: lastDigit === i ? '#EF4444' : '#CBD5E1' }}>{i}</span>
+                    <div style={styles.barBg}>
+                      <div style={{ ...styles.barFill, width: `${pct}%`, background: barColor }} />
+                    </div>
+                    <span style={{ width: '45px', fontSize: '12px' }}>{freq} ({pct.toFixed(1)}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Even/Odd, Rise/Fall, Under/Over */}
+          <div style={styles.card}>
+            <div style={styles.cardTitle}>📈 Probability Stats</div>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span>Even vs Odd</span>
+                <div><span style={{ color: evenOdd.even > evenOdd.odd ? '#22C55E' : '#EF4444' }}>Even {evenOdd.even.toFixed(1)}%</span>  |  <span style={{ color: evenOdd.odd > evenOdd.even ? '#22C55E' : '#EF4444' }}>Odd {evenOdd.odd.toFixed(1)}%</span></div>
+              </div>
+              <div style={{ background: '#0F172A', height: '8px', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${evenOdd.even}%`, background: '#3B82F6' }} />
+                <div style={{ width: `${evenOdd.odd}%`, background: '#A855F7' }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span>Rise vs Fall</span>
+                <div><span style={{ color: riseFall.rise > riseFall.fall ? '#22C55E' : '#EF4444' }}>Rise {riseFall.rise.toFixed(1)}%</span>  |  <span style={{ color: riseFall.fall > riseFall.rise ? '#22C55E' : '#EF4444' }}>Fall {riseFall.fall.toFixed(1)}%</span></div>
+              </div>
+              <div style={{ background: '#0F172A', height: '8px', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${riseFall.rise}%`, background: '#22C55E' }} />
+                <div style={{ width: `${riseFall.fall}%`, background: '#EF4444' }} />
+                <div style={{ width: `${riseFall.unchanged}%`, background: '#64748B' }} />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span>Under 5 vs Over 5</span>
+                <div><span style={{ color: underOver5.under > underOver5.over ? '#22C55E' : '#EF4444' }}>&lt;5 {underOver5.under.toFixed(1)}%</span>  |  <span style={{ color: underOver5.over > underOver5.under ? '#22C55E' : '#EF4444' }}>&gt;=5 {underOver5.over.toFixed(1)}%</span></div>
+              </div>
+              <div style={{ background: '#0F172A', height: '8px', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${underOver5.under}%`, background: '#F59E0B' }} />
+                <div style={{ width: `${underOver5.over}%`, background: '#8B5CF6' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Recent digits preview */}
+          <div style={styles.card}>
+            <div style={styles.cardTitle}>⏱ Recent 10 Digits</div>
+            <div style={styles.digitCircles}>
+              {ticks.slice(-10).reverse().map((tick, idx) => {
+                const dig = Math.abs(Math.floor(tick.quote) % 10);
+                return (
+                  <div key={idx} style={{ ...styles.miniCircle, background: dig === lastDigit ? '#EF4444' : '#0F172A', color: dig === lastDigit ? 'white' : '#CBD5E1', border: dig === lastDigit ? '1px solid #EF4444' : '1px solid #334155' }}>
+                    {dig}
+                  </div>
+                );
+              })}
+              {ticks.length === 0 && <span style={{ color: '#64748B', fontSize: '13px' }}>No ticks yet. Start stream.</span>}
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '11px', color: '#475569', textAlign: 'center' }}>
+              Total ticks analyzed: {ticks.length}
+            </div>
+          </div>
         </div>
       </div>
-      
-      {/* Embedded Styles */}
-      <style jsx>{`
-        .pro-trader-analysis {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          padding: 1.5rem;
-        }
-        
-        .analysis-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-          flex-wrap: wrap;
-          gap: 1rem;
-        }
-        
-        .analysis-header h1 {
-          font-size: 1.75rem;
-          font-weight: 700;
-          background: linear-gradient(135deg, #60a5fa, #c084fc);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-        
-        .title-icon {
-          font-size: 2rem;
-        }
-        
-        .connection-badge {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          border-radius: 2rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          background: #1e293b;
-          border: 1px solid #334155;
-        }
-        
-        .connection-badge.connected .dot {
-          background: #22c55e;
-          box-shadow: 0 0 6px #22c55e;
-        }
-        
-        .connection-badge.disconnected .dot {
-          background: #ef4444;
-        }
-        
-        .dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-        }
-        
-        .status-bar {
-          background: #1e293b;
-          border-radius: 1rem;
-          padding: 0.75rem 1.5rem;
-          margin-bottom: 2rem;
-          border: 1px solid #334155;
-        }
-        
-        .status-info {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          flex-wrap: wrap;
-          font-size: 0.875rem;
-          color: #cbd5e1;
-        }
-        
-        .status-label {
-          color: #64748b;
-        }
-        
-        .status-divider {
-          color: #475569;
-        }
-        
-        .status-text.error {
-          color: #ef4444;
-        }
-        
-        .retry-btn {
-          background: #3b82f6;
-          color: white;
-          border: none;
-          padding: 0.25rem 0.75rem;
-          border-radius: 1rem;
-          font-size: 0.75rem;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        
-        .retry-btn:hover {
-          background: #2563eb;
-        }
-        
-        .analysis-layout {
-          display: grid;
-          grid-template-columns: 280px 1fr 340px;
-          gap: 1.5rem;
-        }
-        
-        @media (max-width: 1200px) {
-          .analysis-layout {
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-          }
-        }
-        
-        .left-panel, .right-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-        }
-        
-        .center-panel {
-          display: flex;
-          justify-content: center;
-        }
-        
-        /* Market Selector Styles */
-        .market-selector {
-          background: #1e293b;
-          border-radius: 1.5rem;
-          padding: 1.25rem;
-          border: 1px solid #334155;
-        }
-        
-        .selector-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          color: #94a3b8;
-          font-size: 0.75rem;
-          font-weight: 600;
-          margin-bottom: 1rem;
-          padding-bottom: 0.75rem;
-          border-bottom: 1px solid #334155;
-        }
-        
-        .market-group {
-          margin-bottom: 1.25rem;
-        }
-        
-        .group-label {
-          font-size: 0.7rem;
-          font-weight: 600;
-          color: #64748b;
-          margin-bottom: 0.5rem;
-          letter-spacing: 0.5px;
-        }
-        
-        .market-buttons {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-        }
-        
-        .market-btn {
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 2rem;
-          padding: 0.375rem 0.875rem;
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: #cbd5e1;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        
-        .market-btn:hover:not(:disabled) {
-          background: #3b82f6;
-          color: white;
-          border-color: #3b82f6;
-        }
-        
-        .market-btn.active {
-          background: #3b82f6;
-          color: white;
-          border-color: #3b82f6;
-          box-shadow: 0 0 8px rgba(59,130,246,0.5);
-        }
-        
-        .market-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-        
-        /* Info Card */
-        .info-card {
-          background: #1e293b;
-          border-radius: 1rem;
-          padding: 1rem;
-          border: 1px solid #334155;
-        }
-        
-        .info-title {
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: #94a3b8;
-          margin-bottom: 0.75rem;
-        }
-        
-        .info-content {
-          font-size: 0.75rem;
-          color: #94a3b8;
-          line-height: 1.5;
-        }
-        
-        .info-tip {
-          margin-top: 0.5rem;
-          color: #60a5fa;
-        }
-        
-        .quick-stats {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0.5rem;
-        }
-        
-        .quick-stat-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 0.75rem;
-        }
-        
-        .quick-stat-item span {
-          color: #64748b;
-        }
-        
-        .quick-stat-item strong {
-          color: #cbd5e1;
-          font-family: monospace;
-        }
-        
-        .quick-stat-item .highlight {
-          color: #60a5fa;
-        }
-        
-        .quick-stat-item .even {
-          color: #34d399;
-        }
-        
-        .quick-stat-item .odd {
-          color: #fbbf24;
-        }
-        
-        /* Circle Card */
-        .circle-card {
-          background: #1e293b;
-          border-radius: 2rem;
-          padding: 1.5rem;
-          border: 1px solid #334155;
-          box-shadow: 0 25px 40px rgba(0,0,0,0.3);
-        }
-        
-        .circle-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 1rem;
-        }
-        
-        .badge {
-          background: #3b82f6;
-          color: white;
-          padding: 0.25rem 0.75rem;
-          border-radius: 2rem;
-          font-size: 0.7rem;
-          font-weight: 600;
-        }
-        
-        .tick-counter {
-          font-size: 0.7rem;
-          color: #64748b;
-          font-family: monospace;
-        }
-        
-        .loading-placeholder {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 320px;
-          gap: 1rem;
-          color: #64748b;
-        }
-        
-        .loading-spinner {
-          width: 40px;
-          height: 40px;
-          border: 3px solid #334155;
-          border-top-color: #3b82f6;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        
-        .arrow-legend {
-          margin-top: 1rem;
-          display: flex;
-          justify-content: center;
-          gap: 1.5rem;
-        }
-        
-        .legend-item {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.7rem;
-          color: #94a3b8;
-        }
-        
-        .red-arrow-sample {
-          width: 20px;
-          height: 12px;
-          background: #ef4444;
-          clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
-        }
-        
-        .size-indicator {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-        
-        .size-dot {
-          border-radius: 50%;
-          background: #3b82f6;
-        }
-        
-        .size-dot.small {
-          width: 8px;
-          height: 8px;
-          opacity: 0.5;
-        }
-        
-        .size-dot.medium {
-          width: 12px;
-          height: 12px;
-          opacity: 0.7;
-        }
-        
-        .size-dot.large {
-          width: 16px;
-          height: 16px;
-        }
-        
-        /* Digit Circle Container */
-        .digit-circle-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-        
-        .digit-circle-svg {
-          filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
-        }
-        
-        .last-digit-preview {
-          margin-top: 1rem;
-          text-align: center;
-        }
-        
-        .last-digit-preview .label {
-          font-size: 0.7rem;
-          color: #64748b;
-          display: block;
-        }
-        
-        .digit-value {
-          font-size: 2.5rem;
-          font-weight: 800;
-          font-family: monospace;
-          background: linear-gradient(135deg, #ef4444, #f97316);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          display: inline-block;
-        }
-        
-        /* Stats Panel */
-        .stats-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-        }
-        
-        .stat-card {
-          background: #1e293b;
-          border-radius: 1.5rem;
-          padding: 1.25rem;
-          border: 1px solid #334155;
-        }
-        
-        .stat-title {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: #94a3b8;
-          margin-bottom: 1rem;
-        }
-        
-        .stat-badge {
-          font-size: 0.65rem;
-          background: #0f172a;
-          padding: 0.2rem 0.5rem;
-          border-radius: 1rem;
-          color: #64748b;
-        }
-        
-        .frequency-bars {
-          display: flex;
-          flex-direction: column;
-          gap: 0.4rem;
-        }
-        
-        .freq-item {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.7rem;
-        }
-        
-        .digit-label {
-          width: 20px;
-          font-weight: 600;
-          color: #cbd5e1;
-          text-align: center;
-        }
-        
-        .digit-label.last {
-          color: #ef4444;
-        }
-        
-        .bar-container {
-          flex: 1;
-          height: 18px;
-          background: #0f172a;
-          border-radius: 9px;
-          overflow: hidden;
-        }
-        
-        .freq-bar {
-          height: 100%;
-          background: linear-gradient(90deg, #3b82f6, #a855f7);
-          border-radius: 9px;
-          transition: width 0.3s;
-        }
-        
-        .freq-bar.last {
-          background: linear-gradient(90deg, #ef4444, #f97316);
-        }
-        
-        .freq-bar.most {
-          background: linear-gradient(90deg, #22c55e, #10b981);
-        }
-        
-        .freq-bar.least {
-          background: linear-gradient(90deg, #64748b, #475569);
-        }
-        
-        .freq-value {
-          width: 30px;
-          font-size: 0.7rem;
-          color: #cbd5e1;
-          text-align: right;
-        }
-        
-        .freq-pct {
-          width: 40px;
-          font-size: 0.65rem;
-          color: #64748b;
-          text-align: right;
-        }
-        
-        .summary-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-        }
-        
-        .summary-item {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-        
-        .summary-label {
-          font-size: 0.65rem;
-          color: #64748b;
-        }
-        
-        .summary-value {
-          font-size: 1.25rem;
-          font-weight: 700;
-          font-family: monospace;
-          color: #cbd5e1;
-        }
-        
-        .summary-value.highlight {
-          color: #60a5fa;
-        }
-        
-        .summary-value.even {
-          color: #34d399;
-        }
-        
-        .summary-value.odd {
-          color: #fbbf24;
-        }
-        
-        .summary-value.over {
-          color: #3b82f6;
-        }
-        
-        .summary-value.under {
-          color: #fbbf24;
-        }
-        
-        .summary-sub {
-          font-size: 0.6rem;
-          color: #64748b;
-        }
-        
-        .recent-digits {
-          display: flex;
-          gap: 0.3rem;
-          flex-wrap: wrap;
-        }
-        
-        .recent-digit {
-          width: 28px;
-          height: 28px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #0f172a;
-          border-radius: 0.5rem;
-          font-weight: 700;
-          font-family: monospace;
-          font-size: 0.9rem;
-          color: #cbd5e1;
-          border: 1px solid #334155;
-        }
-        
-        .recent-digit.last {
-          background: #ef4444;
-          color: white;
-          border-color: #ef4444;
-          box-shadow: 0 0 8px #ef4444;
-        }
-        
-        .recent-digit.even {
-          border-bottom: 2px solid #34d399;
-        }
-        
-        .recent-digit.odd {
-          border-bottom: 2px solid #fbbf24;
-        }
-        
-        .no-data {
-          color: #64748b;
-          font-size: 0.7rem;
-          padding: 0.5rem;
-        }
-      `}</style>
     </div>
   );
-});
+};
 
 export default TradeUiClone;
