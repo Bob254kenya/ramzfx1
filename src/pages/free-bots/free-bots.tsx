@@ -32,7 +32,6 @@ const FreeBots = observer(() => {
         return [
             '$DollarprinterbotOrignal$.xml',
             'Candle-Mine Version 2  (2).xml',
-            'Digits Switcher Bot.xml',
             'DOLLAR  HUNTER BOT ORIGINAL UPDATED.xml',
             "Mathews' speed bot.xml",
             'VEVO_BEST MINER_Bot (1).xml',
