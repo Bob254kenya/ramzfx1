@@ -1,206 +1,415 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { motion } from "framer-motion";
-import { ArrowUp, ArrowDown, Hash, Sigma, Dice5 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowUp, ArrowDown, Hash, Sigma, Dice5, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { localize } from '@deriv-com/translations';
 import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
-import { tradeOptionToBuy } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
-import { contract_stages } from '@/constants/contract-stage';
 import { useStore } from '@/hooks/useStore';
 import './pro-tool.scss';
 
-// Simple Switch component
-const Switch = ({ checked, onCheckedChange, className = "" }: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  className?: string;
-}) => (
-  <label className={`switch ${className}`}>
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onCheckedChange(e.target.checked)}
-    />
-    <span className="slider"></span>
-  </label>
-);
-
-// Types
+// ==================== TYPES ====================
 interface Symbol {
   symbol: string;
   display_name: string;
+  market_type: 'volatility' | 'jump' | 'bearbull';
 }
 
-/**
- * THEME HELPERS
- */
-const themes = {
-  digits: {
-    name: "Over / Under (Digits)",
-    icon: Sigma,
-    gradient: "from-blue-500 via-sky-500 to-cyan-500",
-    shadow: "rgba(59,130,246,0.45)",
-  },
-  evenodd: {
-    name: "Even / Odd",
-    icon: Dice5,
-    gradient: "from-fuchsia-500 via-purple-500 to-indigo-500",
-    shadow: "rgba(168,85,247,0.45)",
-  },
-  risefall: {
-    name: "Rise / Fall",
-    icon: ArrowUp,
-    gradient: "from-emerald-500 via-green-500 to-lime-500",
-    shadow: "rgba(16,185,129,0.45)",
-  },
-  matchdiff: {
-    name: "Matches / Differs",
-    icon: Hash,
-    gradient: "from-rose-500 via-red-500 to-orange-500",
-    shadow: "rgba(244,63,94,0.45)",
-  },
-};
+interface DigitHistory {
+  digit: number;
+  timestamp: number;
+}
 
-/**
- * REUSABLE TRADE CARD
- */
-function TradeCard({ themeKey, children, statusText, onTradeOnce, onStartAuto, onStopAuto }: {
-  themeKey: keyof typeof themes;
-  children: (props: { isAuto: boolean; setIsAuto: (value: boolean) => void }) => React.ReactNode;
-  statusText?: string;
-  onTradeOnce?: () => void;
-  onStartAuto?: () => void;
-  onStopAuto?: () => void;
-}) {
-  const theme = themes[themeKey];
-  const Icon = theme.icon;
-  const [isAuto, setIsAuto] = useState(false);
+// ==================== MARKET LISTS ====================
+const VOLATILITY_MARKETS: string[] = ['10_R', '25_R', '50_R', '75_R', '100_R'];
+const JUMP_MARKETS: string[] = ['10_1S', '15_1S', '25_1S', '30_1S', '50_1S', '75_1S', '100_1S'];
+const BEAR_BULL_MARKETS: string[] = ['BEAR', 'BULL']; // Synthetic bear/bull indices
+
+const ALL_MARKETS = [...VOLATILITY_MARKETS, ...JUMP_MARKETS, ...BEAR_BULL_MARKETS];
+
+// ==================== DIGIT CIRCLE COMPONENT ====================
+interface DigitCircleProps {
+  lastDigit: number | null;
+  onDigitSelect?: (digit: number) => void;
+  selectedDigit?: number;
+}
+
+const DigitCircle: React.FC<DigitCircleProps> = ({ lastDigit, onDigitSelect, selectedDigit }) => {
+  const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const radius = 140;
+  const center = 160;
+  
+  // Calculate position for each digit on a circle
+  const getPosition = (index: number, total: number) => {
+    const angle = (index * 360 / total) - 90; // Start from top (-90 deg)
+    const radian = (angle * Math.PI) / 180;
+    const x = center + radius * Math.cos(radian);
+    const y = center + radius * Math.sin(radian);
+    return { x, y, angle };
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -6, boxShadow: `0 20px 35px ${theme.shadow}` }}
-      transition={{ type: "spring", stiffness: 220, damping: 22 }}
-      className="trade-card"
-    >
-      <div className="trade-card">
-        {/* Header */}
-        <div className={`card-header ${themeKey}`}>
-          <div className="header-content">
-            <div className="icon-wrapper">
-              <Icon size={20} />
-            </div>
-            <h3>{theme.name}</h3>
-          </div>
-
-          {/* Status badge */}
-          <div className={`status-badge ${isAuto ? "active" : "inactive"}`}>
-            <span className={`status-dot ${isAuto ? "active" : "inactive"}`} />
-            {isAuto ? "Auto Trade Active" : "Stopped"}
-          </div>
-        </div>
-
-        <div className="card-content">
-          {/* Content from specific card */}
-          <div className="form-section">
-            {children({ isAuto, setIsAuto })}
-          </div>
-
-          {/* Toggle + Start/Stop Controls */}
-          <div className="controls-section">
-            <div className="control-label">
-              <span>{isAuto ? "Auto Trade" : "Trade Once"}</span>
-              <Switch checked={isAuto} onCheckedChange={setIsAuto} className={isAuto ? "animate-pulse" : ""} />
-            </div>
-
-            <div className="control-buttons">
-              {!isAuto && (
-                <button className="btn-primary" onClick={onTradeOnce}>Trade Once</button>
+    <div className="digit-circle-container">
+      <svg width="320" height="320" viewBox="0 0 320 320" className="digit-circle-svg">
+        {/* Background circle */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius + 15}
+          fill="none"
+          stroke="rgba(59,130,246,0.15)"
+          strokeWidth="2"
+          strokeDasharray="4 6"
+        />
+        
+        {/* Main circle border */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="rgba(15,25,45,0.95)"
+          stroke="url(#circleGradient)"
+          strokeWidth="3"
+        />
+        
+        {/* Gradient definition */}
+        <defs>
+          <linearGradient id="circleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3b82f6" />
+            <stop offset="50%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#06b6d4" />
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        
+        {/* Center decorative circle */}
+        <circle
+          cx={center}
+          cy={center}
+          r="28"
+          fill="rgba(59,130,246,0.15)"
+          stroke="rgba(59,130,246,0.4)"
+          strokeWidth="1.5"
+        />
+        <text
+          x={center}
+          y={center + 5}
+          textAnchor="middle"
+          fill="#60a5fa"
+          fontSize="12"
+          fontWeight="bold"
+        >
+          DIGIT
+        </text>
+        
+        {/* Digit buttons on circle */}
+        {digits.map((digit, idx) => {
+          const { x, y, angle } = getPosition(idx, digits.length);
+          const isLast = lastDigit === digit;
+          const isSelected = selectedDigit === digit;
+          
+          return (
+            <g
+              key={digit}
+              onClick={() => onDigitSelect?.(digit)}
+              style={{ cursor: onDigitSelect ? 'pointer' : 'default' }}
+            >
+              {/* Glow effect for last digit */}
+              {isLast && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="24"
+                  fill="rgba(239,68,68,0.25)"
+                  filter="url(#glow)"
+                >
+                  <animate
+                    attributeName="r"
+                    values="20;28;20"
+                    dur="1.5s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
               )}
-              {isAuto && (
-                <>
-                  <button className="btn-primary" onClick={onStartAuto}>Start Auto</button>
-                  <button className="btn-danger" onClick={onStopAuto}>Stop Auto</button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Footer preview */}
-          {statusText && (
-            <div className="status-footer">
-              {statusText}
-            </div>
-          )}
-        </div>
+              
+              {/* Digit circle background */}
+              <circle
+                cx={x}
+                cy={y}
+                r="20"
+                fill={isSelected ? "rgba(59,130,246,0.3)" : (isLast ? "rgba(239,68,68,0.2)" : "rgba(30,45,65,0.9)")}
+                stroke={isSelected ? "#3b82f6" : (isLast ? "#ef4444" : "rgba(59,130,246,0.5)")}
+                strokeWidth={isLast || isSelected ? "2.5" : "1.5"}
+              />
+              
+              {/* Digit text */}
+              <text
+                x={x}
+                y={y + 5}
+                textAnchor="middle"
+                fill={isLast ? "#ef4444" : (isSelected ? "#60a5fa" : "#94a3b8")}
+                fontSize="16"
+                fontWeight={isLast ? "bold" : "normal"}
+                fontFamily="monospace"
+              >
+                {digit}
+              </text>
+            </g>
+          );
+        })}
+        
+        {/* RED ARROW POINTING to the last digit - DYNAMIC MOVEMENT */}
+        {lastDigit !== null && (() => {
+          const idx = lastDigit;
+          const { x, y, angle } = getPosition(idx, 10);
+          // Arrow angle pointing toward the digit
+          const arrowAngle = angle + 180;
+          const arrowX = center + (radius - 35) * Math.cos((arrowAngle * Math.PI) / 180);
+          const arrowY = center + (radius - 35) * Math.sin((arrowAngle * Math.PI) / 180);
+          
+          return (
+            <g transform={`translate(${arrowX}, ${arrowY}) rotate(${arrowAngle + 90})`}>
+              <polygon
+                points="0,-18 -8,8 0,3 8,8"
+                fill="#ef4444"
+                stroke="#dc2626"
+                strokeWidth="1"
+              >
+                <animateTransform
+                  attributeName="transform"
+                  type="translate"
+                  values="0,-2;0,4;0,-2"
+                  dur="0.8s"
+                  repeatCount="indefinite"
+                  additive="sum"
+                />
+              </polygon>
+            </g>
+          );
+        })()}
+        
+        {/* Center arrow indicator text */}
+        {lastDigit !== null && (
+          <text
+            x={center}
+            y={center + 28}
+            textAnchor="middle"
+            fill="#ef4444"
+            fontSize="10"
+            fontWeight="bold"
+          >
+            ▼ LAST
+          </text>
+        )}
+      </svg>
+      
+      {/* Last digit display */}
+      <div className="last-digit-preview">
+        <span className="label">Last Digit</span>
+        <motion.span
+          key={lastDigit}
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={`digit-value ${lastDigit !== null ? 'active' : ''}`}
+        >
+          {lastDigit !== null ? lastDigit : '—'}
+        </motion.span>
       </div>
-    </motion.div>
+    </div>
   );
+};
+
+// ==================== MARKET SELECTOR COMPONENT ====================
+interface MarketSelectorProps {
+  symbols: Symbol[];
+  selectedSymbol: string;
+  onSymbolChange: (symbol: string) => void;
 }
 
-/**
- * PAGE
- */
+const MarketSelector: React.FC<MarketSelectorProps> = ({ symbols, selectedSymbol, onSymbolChange }) => {
+  const groupedSymbols = {
+    'Volatility (R)': symbols.filter(s => VOLATILITY_MARKETS.includes(s.symbol)),
+    'Jump (1S)': symbols.filter(s => JUMP_MARKETS.includes(s.symbol)),
+    'Bear / Bull': symbols.filter(s => BEAR_BULL_MARKETS.includes(s.symbol)),
+  };
+
+  return (
+    <div className="market-selector">
+      <div className="selector-header">
+        <Activity size={16} />
+        <span>Market Selection</span>
+      </div>
+      <div className="market-groups">
+        {Object.entries(groupedSymbols).map(([groupName, groupSymbols]) => (
+          groupSymbols.length > 0 && (
+            <div key={groupName} className="market-group">
+              <div className="group-label">{groupName}</div>
+              <div className="market-buttons">
+                {groupSymbols.map(sym => (
+                  <button
+                    key={sym.symbol}
+                    className={`market-btn ${selectedSymbol === sym.symbol ? 'active' : ''}`}
+                    onClick={() => onSymbolChange(sym.symbol)}
+                  >
+                    {sym.display_name || sym.symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ==================== STATS PANEL ====================
+interface StatsPanelProps {
+  digitsHistory: DigitHistory[];
+  lastDigit: number | null;
+  ticksProcessed: number;
+}
+
+const StatsPanel: React.FC<StatsPanelProps> = ({ digitsHistory, lastDigit, ticksProcessed }) => {
+  // Calculate digit frequencies
+  const frequencies = Array(10).fill(0);
+  digitsHistory.forEach(h => frequencies[h.digit]++);
+  const total = digitsHistory.length || 1;
+  
+  // Last 10 digits
+  const last10 = digitsHistory.slice(-10).map(h => h.digit);
+  
+  return (
+    <div className="stats-panel">
+      <div className="stat-card">
+        <div className="stat-title">Digit Frequency</div>
+        <div className="frequency-bars">
+          {frequencies.map((freq, i) => (
+            <div key={i} className="freq-item">
+              <span className="digit-label">{i}</span>
+              <div className="bar-container">
+                <div 
+                  className={`freq-bar ${lastDigit === i ? 'last' : ''}`}
+                  style={{ width: `${(freq / total) * 100}%` }}
+                />
+              </div>
+              <span className="freq-value">{freq}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      <div className="stat-card">
+        <div className="stat-title">Recent Digits</div>
+        <div className="recent-digits">
+          {last10.map((digit, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className={`recent-digit ${digit === lastDigit ? 'last' : ''}`}
+            >
+              {digit}
+            </motion.div>
+          ))}
+          {last10.length === 0 && <span className="no-data">No ticks yet</span>}
+        </div>
+        <div className="stat-info">
+          <span>Total Ticks: {ticksProcessed}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== MAIN COMPONENT ====================
 const TradeUiClone = observer(() => {
   const { run_panel, transactions } = useStore();
-
-  // API and connection state
   const apiRef = useRef<any>(null);
   const tickStreamIdRef = useRef<string | null>(null);
-  const stopFlagRef = useRef(false);
-  const lastOutcomeWasLossRef = useRef(false);
-
+  
   // Trading state
   const [symbols, setSymbols] = useState<Symbol[]>([]);
-  const [symbol, setSymbol] = useState('');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('25_R');
   const [account_currency, setAccountCurrency] = useState('USD');
-  const [isRunning, setIsRunning] = useState(false);
-  const [status, setStatus] = useState('');
-  const [digits, setDigits] = useState<number[]>([]);
   const [lastDigit, setLastDigit] = useState<number | null>(null);
   const [ticksProcessed, setTicksProcessed] = useState(0);
+  const [digitsHistory, setDigitsHistory] = useState<DigitHistory[]>([]);
+  const [status, setStatus] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Selected digit for prediction (optional, for future trading)
+  const [selectedPredictionDigit, setSelectedPredictionDigit] = useState<number | undefined>(undefined);
 
-  // Shared inputs (example can be wired to real handlers later)
-  const [stake, setStake] = useState(1);
-  const [ticks, setTicks] = useState(5);
-
-  // Digits state
-  const [digitMode, setDigitMode] = useState("over");
-  const [predictionDigit, setPredictionDigit] = useState(7);
-
-  // Even/Odd state
-  const [parity, setParity] = useState("even");
-
-  // Rise/Fall state
-  const [direction, setDirection] = useState("rise");
-
-  // Matches/Differs state
-  const [matchType, setMatchType] = useState("matches");
-  const [matchDigit, setMatchDigit] = useState(4);
+  // Helper to get display name for symbol
+  const getDisplayName = (sym: string): string => {
+    if (VOLATILITY_MARKETS.includes(sym)) return `${sym} Volatility`;
+    if (JUMP_MARKETS.includes(sym)) return `${sym} Jump`;
+    if (sym === 'BEAR') return 'Bear Market';
+    if (sym === 'BULL') return 'Bull Market';
+    return sym;
+  };
 
   // API initialization
   useEffect(() => {
     const api = generateDerivApiInstance();
     apiRef.current = api;
+    
     const init = async () => {
       try {
-        // Fetch active symbols (volatility indices)
+        // Build symbol list from required markets
+        const requiredSymbols = [...ALL_MARKETS];
         const { active_symbols, error: asErr } = await api.send({ active_symbols: 'brief' });
         if (asErr) throw asErr;
-        const syn = (active_symbols || [])
-          .filter((s: any) => /synthetic/i.test(s.market) || /^R_/.test(s.symbol))
-          .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }));
-        setSymbols(syn);
-        if (!symbol && syn[0]?.symbol) setSymbol(syn[0].symbol);
-        if (syn[0]?.symbol) startTicks(syn[0].symbol);
+        
+        const availableSymbols = (active_symbols || [])
+          .filter((s: any) => requiredSymbols.includes(s.symbol))
+          .map((s: any) => ({
+            symbol: s.symbol,
+            display_name: getDisplayName(s.symbol),
+            market_type: VOLATILITY_MARKETS.includes(s.symbol) ? 'volatility' : 
+                        JUMP_MARKETS.includes(s.symbol) ? 'jump' : 'bearbull'
+          }));
+        
+        // If some symbols not found, create fallback entries
+        const finalSymbols = [...availableSymbols];
+        for (const sym of requiredSymbols) {
+          if (!finalSymbols.find(s => s.symbol === sym)) {
+            finalSymbols.push({
+              symbol: sym,
+              display_name: getDisplayName(sym),
+              market_type: VOLATILITY_MARKETS.includes(sym) ? 'volatility' : 
+                          JUMP_MARKETS.includes(sym) ? 'jump' : 'bearbull'
+            });
+          }
+        }
+        
+        setSymbols(finalSymbols);
+        if (finalSymbols.length > 0 && !selectedSymbol) {
+          setSelectedSymbol(finalSymbols[0].symbol);
+        }
+        
+        // Start ticks with first symbol
+        if (finalSymbols[0]?.symbol) {
+          await startTicks(finalSymbols[0].symbol);
+        }
+        
+        setStatus('Ready - Connected');
+        setIsConnected(true);
       } catch (e: any) {
         console.error('ProTrader init error', e);
         setStatus(`Init error: ${e?.message || 'Unknown'}`);
+        setIsConnected(false);
       }
     };
+    
     init();
-
+    
     return () => {
       stopTicks();
       if (apiRef.current) {
@@ -209,47 +418,44 @@ const TradeUiClone = observer(() => {
     };
   }, []);
 
-  // Authorization helper
-  const authorizeIfNeeded = async () => {
-    const token = V2GetActiveToken();
-    const clientId = V2GetActiveClientId();
-    if (!token || !clientId) {
-      throw new Error('No active token or client ID found');
-    }
-    try {
-      const { authorize, error } = await apiRef.current.authorize(token);
-      if (error) throw error;
-      setAccountCurrency(authorize?.currency || 'USD');
-      return authorize;
-    } catch (e: any) {
-      throw new Error(`Authorization failed: ${e?.message || 'Unknown'}`);
-    }
-  };
-
   // Start tick stream
   const startTicks = async (sym: string) => {
     stopTicks();
-    setDigits([]);
+    setDigitsHistory([]);
     setLastDigit(null);
     setTicksProcessed(0);
+    
     try {
+      // Authorize if needed for tick stream
+      const token = V2GetActiveToken();
+      if (token) {
+        try {
+          await apiRef.current.authorize(token);
+        } catch (e) { /* not critical for ticks */ }
+      }
+      
       const { subscription, error } = await apiRef.current.send({ ticks: sym, subscribe: 1 });
       if (error) throw error;
       if (subscription?.id) tickStreamIdRef.current = subscription.id;
-
+      
       const onMsg = (evt: MessageEvent) => {
         try {
           const data = JSON.parse(evt.data as any);
           if (data?.msg_type === 'tick' && data?.tick?.symbol === sym) {
             const quote = data.tick.quote;
             const digit = Number(String(quote).slice(-1));
+            const timestamp = Date.now();
+            
             setLastDigit(digit);
-            setDigits(prev => [...prev.slice(-8), digit]);
+            setDigitsHistory(prev => [...prev.slice(-49), { digit, timestamp }]); // Keep last 50
             setTicksProcessed(prev => prev + 1);
+            setStatus(`Last tick: ${quote} → digit ${digit}`);
           }
         } catch {}
       };
+      
       apiRef.current?.connection?.addEventListener('message', onMsg);
+      setStatus(`Streaming ${sym}...`);
     } catch (e: any) {
       console.error('startTicks error', e);
       setStatus(`Tick stream error: ${e?.message || 'Unknown'}`);
@@ -264,407 +470,464 @@ const TradeUiClone = observer(() => {
     }
   };
 
-  // Purchase contract function
-  const purchaseContract = async (tradeType: string, prediction?: number) => {
-    await authorizeIfNeeded();
+  // Handle symbol change
+  const handleSymbolChange = useCallback(async (symbol: string) => {
+    setSelectedSymbol(symbol);
+    await startTicks(symbol);
+  }, []);
 
-    const trade_option: any = {
-      amount: Number(stake),
-      basis: 'stake',
-      contractTypes: [tradeType],
-      currency: account_currency,
-      duration: Number(ticks),
-      duration_unit: 't',
-      symbol,
-    };
-
-    if (prediction !== undefined) {
-      trade_option.prediction = Number(prediction);
-    }
-
-    const buy_req = tradeOptionToBuy(tradeType, trade_option);
-    const { buy, error } = await apiRef.current.buy(buy_req);
-    if (error) throw error;
-
-    setStatus(`Purchased: ${buy?.longcode || 'Contract'} (ID: ${buy?.contract_id})`);
-
-    // Add to transactions like Smart Trader
-    try {
-      const symbol_display = symbols.find(s => s.symbol === symbol)?.display_name || symbol;
-      transactions.onBotContractEvent({
-        contract_id: buy?.contract_id,
-        transaction_ids: { buy: buy?.transaction_id },
-        buy_price: buy?.buy_price,
-        currency: account_currency,
-        contract_type: tradeType as any,
-        underlying: symbol,
-        display_name: symbol_display,
-        date_start: Math.floor(Date.now() / 1000),
-        status: 'open',
-      } as any);
-    } catch {}
-
-    // Subscribe to contract updates
-    try {
-      const res = await apiRef.current.send({
-        proposal_open_contract: 1,
-        contract_id: buy?.contract_id,
-        subscribe: 1,
-      });
-      const { error, proposal_open_contract: pocInit, subscription } = res || {};
-      if (error) throw error;
-
-      let pocSubId: string | null = subscription?.id || null;
-      const targetId = String(buy?.contract_id || '');
-
-      if (pocInit && String(pocInit?.contract_id || '') === targetId) {
-        transactions.onBotContractEvent(pocInit);
-      }
-
-      const onMsg = (evt: MessageEvent) => {
-        try {
-          const data = JSON.parse(evt.data as any);
-          if (data?.msg_type === 'proposal_open_contract') {
-            const poc = data.proposal_open_contract;
-            if (!pocSubId && data?.subscription?.id) pocSubId = data.subscription.id;
-            if (String(poc?.contract_id || '') === targetId) {
-              transactions.onBotContractEvent(poc);
-              if (poc?.is_sold || poc?.status === 'sold') {
-                if (pocSubId) apiRef.current?.forget?.({ forget: pocSubId });
-                apiRef.current?.connection?.removeEventListener('message', onMsg);
-                const profit = Number(poc?.profit || 0);
-                lastOutcomeWasLossRef.current = profit <= 0;
-              }
-            }
-          }
-        } catch {}
-      };
-      apiRef.current?.connection?.addEventListener('message', onMsg);
-    } catch (subErr) {
-      console.error('subscribe poc error', subErr);
-    }
-
-    return buy;
+  // Handle digit click for prediction (analysis mode - just for UI feedback)
+  const handleDigitSelect = (digit: number) => {
+    setSelectedPredictionDigit(digit);
+    setStatus(`Selected digit ${digit} for analysis`);
+    setTimeout(() => {
+      if (status.includes('Selected')) setStatus(`Streaming ${selectedSymbol}...`);
+    }, 2000);
   };
 
-  // Trade handlers for each card type
-  const handleDigitsTrade = async () => {
-    try {
-      setStatus('Processing...');
-      const tradeType = digitMode === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
-      await purchaseContract(tradeType, predictionDigit);
-    } catch (e: any) {
-      setStatus(`Error: ${e?.message || 'Unknown'}`);
-    }
-  };
-
-  const handleEvenOddTrade = async () => {
-    try {
-      setStatus('Processing...');
-      const tradeType = parity === 'even' ? 'DIGITEVEN' : 'DIGITODD';
-      await purchaseContract(tradeType);
-    } catch (e: any) {
-      setStatus(`Error: ${e?.message || 'Unknown'}`);
-    }
-  };
-
-  const handleRiseFallTrade = async () => {
-    try {
-      setStatus('Processing...');
-      const tradeType = direction === 'rise' ? 'CALL' : 'PUT';
-      await purchaseContract(tradeType);
-    } catch (e: any) {
-      setStatus(`Error: ${e?.message || 'Unknown'}`);
-    }
-  };
-
-  const handleMatchDiffTrade = async () => {
-    try {
-      setStatus('Processing...');
-      const tradeType = matchType === 'matches' ? 'DIGITMATCH' : 'DIGITDIFF';
-      await purchaseContract(tradeType, matchDigit);
-    } catch (e: any) {
-      setStatus(`Error: ${e?.message || 'Unknown'}`);
-    }
-  };
+  const currentSymbolDisplay = symbols.find(s => s.symbol === selectedSymbol)?.display_name || selectedSymbol;
 
   return (
-    <div className="pro-trader">
-      <h1>Pro Trader</h1>
-
-      {/* Status and Symbol Info */}
-      <div style={{ textAlign: 'center', marginBottom: '2rem', padding: '1rem', background: '#f8f9fa', borderRadius: '0.5rem', maxWidth: '800px', margin: '0 auto 2rem auto' }}>
-        <div style={{ marginBottom: '0.5rem' }}>
-          <strong>Symbol:</strong> {symbols.find(s => s.symbol === symbol)?.display_name || symbol || 'Loading...'}
+    <div className="pro-trader pro-trader-analysis">
+      <div className="analysis-header">
+        <h1>
+          <span className="title-icon">🎯</span>
+          Circle Digit Analysis Tool
+        </h1>
+        <div className={`connection-badge ${isConnected ? 'connected' : 'disconnected'}`}>
+          <span className="dot" />
+          {isConnected ? 'Live Data' : 'Reconnecting...'}
         </div>
-        <div style={{ marginBottom: '0.5rem' }}>
-          <strong>Last Digit:</strong> {lastDigit !== null ? lastDigit : 'Waiting...'}
+      </div>
+      
+      {/* Status Bar */}
+      <div className="status-bar">
+        <div className="status-info">
+          <span className="status-label">Current Market:</span>
+          <strong>{currentSymbolDisplay}</strong>
+          <span className="status-divider">|</span>
+          <span className="status-label">Status:</span>
+          <span className={`status-text ${status.includes('Error') ? 'error' : ''}`}>
+            {status || 'Initializing...'}
+          </span>
         </div>
-        <div style={{ marginBottom: '0.5rem' }}>
-          <strong>Ticks Processed:</strong> {ticksProcessed}
-        </div>
-        {status && (
-          <div style={{ color: status.includes('Error') ? '#dc2626' : '#059669', fontWeight: 'bold' }}>
-            {status}
+      </div>
+      
+      <div className="analysis-layout">
+        {/* Left Panel - Market Selector */}
+        <div className="left-panel">
+          <MarketSelector
+            symbols={symbols}
+            selectedSymbol={selectedSymbol}
+            onSymbolChange={handleSymbolChange}
+          />
+          
+          {/* Mini info */}
+          <div className="info-card">
+            <div className="info-title">📊 Analysis Info</div>
+            <div className="info-content">
+              <p>The red arrow dynamically points to the <strong>last digit</strong> received from the tick stream.</p>
+              <p>Digits are arranged in a circular layout for easy visualization of digit patterns.</p>
+              <p>Click any digit to select it for pattern analysis.</p>
+            </div>
           </div>
-        )}
+        </div>
+        
+        {/* Center Panel - Digit Circle */}
+        <div className="center-panel">
+          <div className="circle-card">
+            <div className="circle-header">
+              <span className="badge">LIVE DIGIT ANALYSIS</span>
+              <span className="tick-counter">{ticksProcessed} ticks</span>
+            </div>
+            <DigitCircle
+              lastDigit={lastDigit}
+              onDigitSelect={handleDigitSelect}
+              selectedDigit={selectedPredictionDigit}
+            />
+            <div className="arrow-legend">
+              <div className="legend-item">
+                <div className="red-arrow-sample" />
+                <span>Moving arrow → points to last digit</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Right Panel - Stats */}
+        <div className="right-panel">
+          <StatsPanel
+            digitsHistory={digitsHistory}
+            lastDigit={lastDigit}
+            ticksProcessed={ticksProcessed}
+          />
+        </div>
       </div>
-
-      <div className="trade-grid">
-        {/* Over/Under (Digits) */}
-        <TradeCard
-          themeKey="digits"
-          statusText={`Trading ${digitMode.toUpperCase()} ${predictionDigit} • Stake ${stake} • Ticks ${ticks}`}
-          onTradeOnce={handleDigitsTrade}
-        >
-          {() => (
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Trade Type</label>
-                <div className="radio-group">
-                  <label>
-                    <input
-                      type="radio"
-                      name="digits-type"
-                      value="over"
-                      checked={digitMode === "over"}
-                      onChange={() => setDigitMode("over")}
-                    />
-                    Over
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="digits-type"
-                      value="under"
-                      checked={digitMode === "under"}
-                      onChange={() => setDigitMode("under")}
-                    />
-                    Under
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label>Prediction Digit</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={9}
-                  value={predictionDigit}
-                  onChange={(e) => setPredictionDigit(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Stake</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stake}
-                  onChange={(e) => setStake(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Ticks</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={ticks}
-                  onChange={(e) => setTicks(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          )}
-        </TradeCard>
-
-        {/* Even / Odd */}
-        <TradeCard
-          themeKey="evenodd"
-          statusText={`Trading ${parity.toUpperCase()} • Stake ${stake} • Ticks ${ticks}`}
-          onTradeOnce={handleEvenOddTrade}
-        >
-          {() => (
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Select</label>
-                <div className="radio-group">
-                  <label>
-                    <input
-                      type="radio"
-                      name="parity"
-                      value="even"
-                      checked={parity === "even"}
-                      onChange={() => setParity("even")}
-                    />
-                    Even
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="parity"
-                      value="odd"
-                      checked={parity === "odd"}
-                      onChange={() => setParity("odd")}
-                    />
-                    Odd
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label>Stake</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stake}
-                  onChange={(e) => setStake(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Ticks</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={ticks}
-                  onChange={(e) => setTicks(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          )}
-        </TradeCard>
-
-        {/* Rise / Fall */}
-        <TradeCard
-          themeKey="risefall"
-          statusText={`Trading ${direction.toUpperCase()} • Stake ${stake} • Ticks ${ticks}`}
-          onTradeOnce={handleRiseFallTrade}
-        >
-          {() => (
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Direction</label>
-                <div className="radio-group">
-                  <label>
-                    <input
-                      type="radio"
-                      name="direction"
-                      value="rise"
-                      checked={direction === "rise"}
-                      onChange={() => setDirection("rise")}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      Rise <ArrowUp size={14} />
-                    </span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="direction"
-                      value="fall"
-                      checked={direction === "fall"}
-                      onChange={() => setDirection("fall")}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      Fall <ArrowDown size={14} />
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label>Stake</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stake}
-                  onChange={(e) => setStake(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Ticks</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={ticks}
-                  onChange={(e) => setTicks(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          )}
-        </TradeCard>
-
-        {/* Matches / Differs */}
-        <TradeCard
-          themeKey="matchdiff"
-          statusText={`Trading ${matchType.toUpperCase()} ${matchType === "matches" ? matchDigit : "(any except " + matchDigit + ")"} • Stake ${stake} • Ticks ${ticks}`}
-          onTradeOnce={handleMatchDiffTrade}
-        >
-          {() => (
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Type</label>
-                <div className="radio-group">
-                  <label>
-                    <input
-                      type="radio"
-                      name="matchType"
-                      value="matches"
-                      checked={matchType === "matches"}
-                      onChange={() => setMatchType("matches")}
-                    />
-                    Matches
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="matchType"
-                      value="differs"
-                      checked={matchType === "differs"}
-                      onChange={() => setMatchType("differs")}
-                    />
-                    Differs
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label>Digit</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={9}
-                  value={matchDigit}
-                  onChange={(e) => setMatchDigit(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Stake</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stake}
-                  onChange={(e) => setStake(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Ticks</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={ticks}
-                  onChange={(e) => setTicks(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          )}
-        </TradeCard>
-      </div>
+      
+      <style jsx>{`
+        .pro-trader-analysis {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          padding: 1.5rem;
+        }
+        
+        .analysis-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+        
+        .analysis-header h1 {
+          font-size: 1.75rem;
+          font-weight: 700;
+          background: linear-gradient(135deg, #60a5fa, #c084fc);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
+        .title-icon {
+          font-size: 2rem;
+        }
+        
+        .connection-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 2rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          background: #1e293b;
+        }
+        
+        .connection-badge.connected .dot {
+          background: #22c55e;
+          box-shadow: 0 0 6px #22c55e;
+        }
+        
+        .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #ef4444;
+        }
+        
+        .status-bar {
+          background: #1e293b;
+          border-radius: 1rem;
+          padding: 0.75rem 1.5rem;
+          margin-bottom: 2rem;
+          border: 1px solid #334155;
+        }
+        
+        .status-info {
+          display: flex;
+          gap: 1rem;
+          flex-wrap: wrap;
+          font-size: 0.875rem;
+          color: #cbd5e1;
+        }
+        
+        .status-divider {
+          color: #475569;
+        }
+        
+        .status-text.error {
+          color: #ef4444;
+        }
+        
+        .analysis-layout {
+          display: grid;
+          grid-template-columns: 280px 1fr 320px;
+          gap: 1.5rem;
+        }
+        
+        @media (max-width: 1100px) {
+          .analysis-layout {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+          }
+        }
+        
+        .left-panel, .right-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+        
+        .market-selector {
+          background: #1e293b;
+          border-radius: 1.5rem;
+          padding: 1.25rem;
+          border: 1px solid #334155;
+        }
+        
+        .selector-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: #94a3b8;
+          font-size: 0.75rem;
+          font-weight: 600;
+          margin-bottom: 1rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 1px solid #334155;
+        }
+        
+        .market-group {
+          margin-bottom: 1.25rem;
+        }
+        
+        .group-label {
+          font-size: 0.7rem;
+          font-weight: 600;
+          color: #64748b;
+          margin-bottom: 0.5rem;
+          letter-spacing: 0.5px;
+        }
+        
+        .market-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+        
+        .market-btn {
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 2rem;
+          padding: 0.375rem 0.875rem;
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: #cbd5e1;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        
+        .market-btn:hover {
+          background: #3b82f6;
+          color: white;
+          border-color: #3b82f6;
+        }
+        
+        .market-btn.active {
+          background: #3b82f6;
+          color: white;
+          border-color: #3b82f6;
+          box-shadow: 0 0 8px rgba(59,130,246,0.5);
+        }
+        
+        .info-card {
+          background: #1e293b;
+          border-radius: 1rem;
+          padding: 1rem;
+          border: 1px solid #334155;
+        }
+        
+        .info-title {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #94a3b8;
+          margin-bottom: 0.75rem;
+        }
+        
+        .info-content {
+          font-size: 0.75rem;
+          color: #94a3b8;
+          line-height: 1.5;
+        }
+        
+        .center-panel {
+          display: flex;
+          justify-content: center;
+        }
+        
+        .circle-card {
+          background: #1e293b;
+          border-radius: 2rem;
+          padding: 1.5rem;
+          border: 1px solid #334155;
+          box-shadow: 0 25px 40px rgba(0,0,0,0.3);
+        }
+        
+        .circle-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 1rem;
+        }
+        
+        .badge {
+          background: #3b82f6;
+          padding: 0.25rem 0.75rem;
+          border-radius: 2rem;
+          font-size: 0.7rem;
+          font-weight: 600;
+        }
+        
+        .tick-counter {
+          font-size: 0.7rem;
+          color: #64748b;
+          font-family: monospace;
+        }
+        
+        .arrow-legend {
+          margin-top: 1rem;
+          text-align: center;
+        }
+        
+        .legend-item {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          font-size: 0.7rem;
+          color: #94a3b8;
+        }
+        
+        .red-arrow-sample {
+          width: 20px;
+          height: 12px;
+          background: #ef4444;
+          clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
+        }
+        
+        .digit-circle-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        
+        .last-digit-preview {
+          margin-top: 1rem;
+          text-align: center;
+        }
+        
+        .last-digit-preview .label {
+          font-size: 0.7rem;
+          color: #64748b;
+          display: block;
+        }
+        
+        .digit-value {
+          font-size: 2.5rem;
+          font-weight: 800;
+          font-family: monospace;
+          background: linear-gradient(135deg, #ef4444, #f97316);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          display: inline-block;
+        }
+        
+        .stats-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+        
+        .stat-card {
+          background: #1e293b;
+          border-radius: 1.5rem;
+          padding: 1.25rem;
+          border: 1px solid #334155;
+        }
+        
+        .stat-title {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #94a3b8;
+          margin-bottom: 1rem;
+        }
+        
+        .frequency-bars {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        
+        .freq-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.7rem;
+        }
+        
+        .digit-label {
+          width: 20px;
+          font-weight: 600;
+          color: #cbd5e1;
+        }
+        
+        .bar-container {
+          flex: 1;
+          height: 20px;
+          background: #0f172a;
+          border-radius: 10px;
+          overflow: hidden;
+        }
+        
+        .freq-bar {
+          height: 100%;
+          background: linear-gradient(90deg, #3b82f6, #a855f7);
+          border-radius: 10px;
+          transition: width 0.3s;
+        }
+        
+        .freq-bar.last {
+          background: linear-gradient(90deg, #ef4444, #f97316);
+        }
+        
+        .freq-value {
+          width: 30px;
+          font-size: 0.7rem;
+          color: #64748b;
+        }
+        
+        .recent-digits {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+        
+        .recent-digit {
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #0f172a;
+          border-radius: 0.5rem;
+          font-weight: 700;
+          font-family: monospace;
+          font-size: 1rem;
+          color: #cbd5e1;
+        }
+        
+        .recent-digit.last {
+          background: #ef4444;
+          color: white;
+          box-shadow: 0 0 8px #ef4444;
+        }
+        
+        .stat-info {
+          margin-top: 1rem;
+          font-size: 0.7rem;
+          color: #64748b;
+          text-align: center;
+        }
+        
+        .no-data {
+          color: #64748b;
+          font-size: 0.7rem;
+        }
+      `}</style>
     </div>
   );
 });
