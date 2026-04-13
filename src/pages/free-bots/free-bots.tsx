@@ -31,19 +31,10 @@ const FreeBots = observer(() => {
     const getXmlFiles = () => {
         return [
             '$DollarprinterbotOrignal$.xml',
-            '360 PRINTER BOT____ [ Version 2.2 ].xml',
             'Candle-Mine Version 2  (2).xml',
-            'DIFFERS KILLER BOT.xml',
             'Digits Switcher Bot.xml',
             'DOLLAR  HUNTER BOT ORIGINAL UPDATED.xml',
-            'Legoo-sniper-bot.xml',
-            'MKOREAN SV6 BOT (1).xml',
-            'Marvel PRO Fully Auto V 2.0  [Original] by {www.360tradinghub.co.ke}.xml',
-            'Marvel SPLIT Version by 360 Trading Hub.xml',
             "Mathews' speed bot.xml",
-            'Printed_dollars_Bot.xml',
-            'TC Bot 1.1.xml',
-            'TWO ENTRY BOT  MANUALLY  (1).xml',
             'VEVO_BEST MINER_Bot (1).xml',
             'WEALTH COMPLEX OVER 3 (1) (1).xml',
             
