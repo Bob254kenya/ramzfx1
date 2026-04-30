@@ -64,6 +64,11 @@ const styles = {
     gridTemplateColumns: '300px 1fr 340px',
     gap: '24px',
   },
+  gridMobile: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '24px',
+  },
   card: {
     background: '#1E293B',
     borderRadius: '28px',
@@ -228,11 +233,6 @@ const styles = {
     fontSize: '12px',
     color: '#22C55E',
   },
-  @media (maxWidth: '1000px') {
-    grid: {
-      gridTemplateColumns: '1fr',
-    }
-  }
 };
 
 // ==================== DIGIT CIRCLE SVG COMPONENT ====================
@@ -348,9 +348,20 @@ const TradeUiClone = () => {
   const [riseFall, setRiseFall] = useState({ rise: 0, fall: 0, unchanged: 0 });
   const [underOver5, setUnderOver5] = useState({ under: 0, over: 0 });
   const [percentages, setPercentages] = useState(Array(10).fill(0));
+  const [isMobile, setIsMobile] = useState(false);
   
   const wsRef = useRef(null);
   const tickBufferRef = useRef([]);
+
+  // Handle responsive design
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 1000);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Helper: get symbol code for Deriv API
   const getSymbolCode = (sym) => {
@@ -589,7 +600,7 @@ const TradeUiClone = () => {
         </div>
       </div>
 
-      <div style={styles.grid}>
+      <div style={isMobile ? styles.gridMobile : styles.grid}>
         {/* LEFT PANEL - MARKET SELECTOR & CONTROLS */}
         <div style={styles.card}>
           <div style={styles.cardTitle}>🎯 Volatility Indices</div>
