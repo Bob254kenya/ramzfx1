@@ -6,13 +6,95 @@ import { ArrowUp, ArrowDown, Hash, Sigma, Dice5, Play, StopCircle, Trash2, Scan,
 import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
 import { tradeOptionToBuy } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
 import { useStore } from '@/hooks/useStore';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import './pro-scanner-bot.scss';
+
+// Create simple fallback components since the UI components are missing
+const Input: React.FC<any> = (props) => <input {...props} className={`px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${props.className || ''}`} />;
+
+const Button: React.FC<any> = ({ children, variant, size, className, ...props }) => {
+  const baseClasses = "px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
+  const variantClasses = variant === 'outline' 
+    ? "border border-slate-600 hover:bg-slate-700 text-white" 
+    : variant === 'ghost' 
+    ? "hover:bg-slate-700 text-white"
+    : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-lg";
+  const sizeClasses = size === 'sm' ? "text-sm px-3 py-1.5" : "text-base";
+  return <button {...props} className={`${baseClasses} ${variantClasses} ${sizeClasses} ${className || ''}`}>{children}</button>;
+};
+
+const Badge: React.FC<any> = ({ children, variant, className }) => {
+  const variantClasses = variant === 'destructive' 
+    ? "bg-red-500/20 text-red-400 border-red-500/30"
+    : variant === 'outline'
+    ? "bg-transparent border border-slate-600 text-slate-300"
+    : "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30";
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${variantClasses} ${className || ''}`}>{children}</span>;
+};
+
+const Switch: React.FC<any> = ({ checked, onCheckedChange, disabled }) => {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onCheckedChange?.(!checked)}
+      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 ${checked ? 'bg-cyan-500' : 'bg-slate-700'}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+    </button>
+  );
+};
+
+const Select: React.FC<any> = ({ children, value, onValueChange, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-left focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+      >
+        {value || <span className="text-slate-400">Select option</span>}
+      </button>
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {React.Children.map(children, child => {
+            if (React.isValidElement(child) && child.type === SelectContent) {
+              return React.cloneElement(child, { onClose: () => setIsOpen(false), onValueChange, value });
+            }
+            return child;
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SelectTrigger: React.FC<any> = ({ children }) => <>{children}</>;
+const SelectValue: React.FC<any> = ({ placeholder }) => <span className="text-slate-400">{placeholder}</span>;
+const SelectContent: React.FC<any> = ({ children, onClose, onValueChange, value }) => (
+  <div>
+    {React.Children.map(children, child => {
+      if (React.isValidElement(child) && child.type === SelectItem) {
+        return React.cloneElement(child, { onSelect: (val: string) => { onValueChange?.(val); onClose?.(); }, selected: value === child.props.value });
+      }
+      return child;
+    })}
+  </div>
+);
+const SelectItem: React.FC<any> = ({ children, value, onSelect, selected }) => (
+  <button
+    onClick={() => onSelect?.(value)}
+    className={`w-full px-3 py-2 text-left text-white hover:bg-slate-700 transition-colors ${selected ? 'bg-cyan-500/20 text-cyan-400' : ''}`}
+  >
+    {children}
+  </button>
+);
+
+const Textarea: React.FC<any> = (props) => <textarea {...props} className={`px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${props.className || ''}`} />;
 
 // Types
 interface LogEntry {
@@ -790,7 +872,7 @@ const ProScannerBot = () => {
         if (last9.every(d => d <= 4)) return { matched: true, contractType: 'DIGITUNDER', barrier: '5', patternDigits: last9.join(',') };
         return { matched: false };
       }
-      case 'over3_under6_5': {
+            case 'over3_under6_5': {
         if (digits.length < 5) return { matched: false };
         const last5 = digits.slice(-5);
         if (last5.every(d => d < 3)) return { matched: true, contractType: 'DIGITOVER', barrier: '3', patternDigits: last5.join(',') };
@@ -1287,72 +1369,80 @@ const ProScannerBot = () => {
       <TPSLNotificationPopup />
       {showSocialPopup && <SocialNotificationPopup onClose={() => setShowSocialPopup(false)} />}
       
-      <div className="pro-scanner-bot">
+      <div className="pro-scanner-bot" style={{ padding: '24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', minHeight: '100vh', color: 'white' }}>
         {/* Header */}
-        <div className="header">
-          <div className="header-left">
-            <div className="logo">
-              <Scan className="w-5 h-5" />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '20px', background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(10px)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '10px', background: 'linear-gradient(135deg, #06b6d4, #3b82f6)', borderRadius: '12px' }}>
+              <Scan size={24} />
             </div>
             <div>
-              <h1>Milliefx Pro Scanner Bot</h1>
-              <p>Advanced Market Scanning & Recovery System</p>
+              <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>Milliefx Pro Scanner Bot</h1>
+              <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0' }}>Advanced Market Scanning & Recovery System</p>
             </div>
           </div>
-          <div className="header-right">
-            <Badge className={`status-badge ${status.color}`}>{status.icon} {status.label}</Badge>
-            {isRunning && <Badge variant="outline" className="pnl-badge">P/L: ${netProfit.toFixed(2)}</Badge>}
-            {!isConnected && <Badge variant="destructive" className="disconnect-badge">🔌 DISCONNECTED</Badge>}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Badge className={status.color} style={{ padding: '6px 12px', fontSize: '12px' }}>{status.icon} {status.label}</Badge>
+            {isRunning && <Badge variant="outline" style={{ borderColor: '#10b981', color: '#10b981' }}>P/L: ${netProfit.toFixed(2)}</Badge>}
+            {!isConnected && <Badge variant="destructive" style={{ background: '#ef4444' }}>🔌 DISCONNECTED</Badge>}
           </div>
         </div>
         
         {/* Stats Row */}
-        <div className="stats-grid">
-          <div className="stat-card scanner-card">
-            <div className="stat-header">
-              <div className="stat-title"><Eye className="w-4 h-4"/><span>Scan All Markets</span><Badge variant={scannerActive ? 'default' : 'secondary'}>{scannerActive ? '🟢 ON' : '⚫ OFF'}</Badge></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+          <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><Eye size={16} /><span>Scan All Markets</span><Badge>{scannerActive ? '🟢 ON' : '⚫ OFF'}</Badge></div>
               <Switch checked={scannerActive} onCheckedChange={setScannerActive} disabled={isRunning} />
             </div>
-            <div className="markets-list">{SCANNER_MARKETS.map(m => <Badge key={m.symbol} variant="outline" className={`market-badge ${tickMapRef.current.get(m.symbol)?.length ? 'active' : ''}`}>{m.name}</Badge>)}</div>
-          </div>
-          <div className="stat-card turbo-card">
-            <div className="stat-header">
-              <div className="stat-title"><Zap className={`w-4 h-4 ${turboMode ? 'active' : ''}`}/><span>Turbo Mode</span></div>
-              <Button size="sm" variant={turboMode ? 'default' : 'outline'} className="turbo-btn" onClick={() => setTurboMode(!turboMode)} disabled={isRunning}>{turboMode ? '⚡ ON' : 'OFF'}</Button>
-            </div>
-            <div className="turbo-stats">
-              <div><div>Latency</div><div className="value">{turboLatency}ms</div></div>
-              <div><div>Captured</div><div className="value">{ticksCaptured}</div></div>
-              <div><div>Missed</div><div className="value missed">{ticksMissed}</div></div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {SCANNER_MARKETS.map(m => <Badge key={m.symbol} variant="outline" style={{ background: tickMapRef.current.get(m.symbol)?.length ? 'rgba(6, 182, 212, 0.2)' : 'transparent', borderColor: tickMapRef.current.get(m.symbol)?.length ? '#06b6d4' : '#334155' }}>{m.name}</Badge>)}
             </div>
           </div>
-          <div className="stat-card stats-card">
-            <div className="stat-header"><span>Live Stats</span><span className="balance">${localBalance.toFixed(2)}</span></div>
-            <div className="live-stats">
-              <div><div>W/L</div><div><span className="wins">{wins}</span>/<span className="losses">{losses}</span></div></div>
-              <div><div>P/L</div><div className={netProfit >= 0 ? 'profit' : 'loss'}>${netProfit.toFixed(2)}</div></div>
-              <div><div>Stake</div><div>${currentStake.toFixed(2)}{martingaleStep > 0 && <span className="martingale-step">M{martingaleStep}</span>}</div></div>
+          <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}><Zap size={16} /><span>Turbo Mode</span></div>
+              <Button size="sm" variant={turboMode ? 'default' : 'outline'} onClick={() => setTurboMode(!turboMode)} disabled={isRunning}>{turboMode ? '⚡ ON' : 'OFF'}</Button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Latency</div><div style={{ fontSize: '18px', fontWeight: 'bold' }}>{turboLatency}ms</div></div>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Captured</div><div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981' }}>{ticksCaptured}</div></div>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Missed</div><div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444' }}>{ticksMissed}</div></div>
+            </div>
+          </div>
+          <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span>Live Stats</span>
+              <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#fbbf24' }}>${localBalance.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>W/L</div><div><span style={{ color: '#10b981' }}>{wins}</span>/<span style={{ color: '#ef4444' }}>{losses}</span></div></div>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>P/L</div><div style={{ color: netProfit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>${netProfit.toFixed(2)}</div></div>
+              <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Stake</div><div style={{ fontWeight: 'bold' }}>${currentStake.toFixed(2)}{martingaleStep > 0 && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#f59e0b' }}>M{martingaleStep}</span>}</div></div>
             </div>
           </div>
         </div>
         
         {/* Main Layout */}
-        <div className="main-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '24px' }}>
           {/* Left Column */}
-          <div className="left-column">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* M1 Card */}
-            <div className="config-card m1-card">
-              <div className="card-header"><h3><Home className="w-4 h-4"/> M1 — Home</h3><Switch checked={m1Enabled} onCheckedChange={setM1Enabled} disabled={isRunning} /></div>
-              <div className="card-content">
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: 0 }}><Home size={16} /> M1 — Home</h3>
+                <Switch checked={m1Enabled} onCheckedChange={setM1Enabled} disabled={isRunning} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <Select value={m1Symbol} onValueChange={setM1Symbol} disabled={isRunning}>
-                  <SelectTrigger className="select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{SCANNER_MARKETS.map(m => <SelectItem key={m.symbol} value={m.symbol}>{m.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <div>
-                  <label className="text-[11px] text-slate-400 mb-1.5 block font-semibold">Strategy Mode</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', display: 'block' }}>Strategy Mode</label>
                   <Select value={m1StrategyType} onValueChange={(v: M1StrategyType) => { setM1StrategyType(v); if (v !== 'disabled') setStrategyM1Enabled(true); }} disabled={isRunning}>
-                    <SelectTrigger className="select-trigger"><SelectValue placeholder="Select strategy" /></SelectTrigger>
-                    <SelectContent className="max-h-[300px] overflow-y-auto">
+                    <SelectTrigger><SelectValue placeholder="Select strategy" /></SelectTrigger>
+                    <SelectContent style={{ maxHeight: '300px', overflowY: 'auto' }}>
                       <SelectItem value="over0_under9_1">{getM1DisplayName('over0_under9_1')}</SelectItem>
                       <SelectItem value="over0_under9_2">{getM1DisplayName('over0_under9_2')}</SelectItem>
                       <SelectItem value="over0_under9_3">{getM1DisplayName('over0_under9_3')}</SelectItem>
@@ -1373,30 +1463,41 @@ const ProScannerBot = () => {
                   </Select>
                 </div>
                 <Select value={m1Contract} onValueChange={setM1Contract} disabled={isRunning}>
-                  <SelectTrigger className="select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{CONTRACT_TYPES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
-                {needsBarrier(m1Contract) && <Input type="number" min="0" max="9" value={m1Barrier} onChange={e => setM1Barrier(e.target.value)} className="input-field" disabled={isRunning} />}
-                <div className="hook-section">
-                  <div className="hook-header"><span><Anchor className="w-3 h-3"/> Virtual Hook</span><Switch checked={m1HookEnabled} onCheckedChange={setM1HookEnabled} disabled={isRunning} /></div>
-                  {m1HookEnabled && <div className="hook-inputs"><div><label>V-Losses</label><Input type="number" min="1" max="20" value={m1VirtualLossCount} onChange={e => setM1VirtualLossCount(e.target.value)} disabled={isRunning} /></div><div><label>Real Trades</label><Input type="number" min="1" max="10" value={m1RealCount} onChange={e => setM1RealCount(e.target.value)} disabled={isRunning} /></div></div>}
+                {needsBarrier(m1Contract) && <Input type="number" min="0" max="9" value={m1Barrier} onChange={e => setM1Barrier(e.target.value)} disabled={isRunning} />}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}><Anchor size={12} /> Virtual Hook</span>
+                    <Switch checked={m1HookEnabled} onCheckedChange={setM1HookEnabled} disabled={isRunning} />
+                  </div>
+                  {m1HookEnabled && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>V-Losses</label><Input type="number" min="1" max="20" value={m1VirtualLossCount} onChange={e => setM1VirtualLossCount(e.target.value)} disabled={isRunning} /></div>
+                      <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Real Trades</label><Input type="number" min="1" max="10" value={m1RealCount} onChange={e => setM1RealCount(e.target.value)} disabled={isRunning} /></div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             
             {/* M2 Card */}
-            <div className="config-card m2-card">
-              <div className="card-header"><h3><RefreshCw className="w-4 h-4"/> M2 — Recovery</h3><Switch checked={m2Enabled} onCheckedChange={setM2Enabled} disabled={isRunning} /></div>
-              <div className="card-content">
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: 0 }}><RefreshCw size={16} /> M2 — Recovery</h3>
+                <Switch checked={m2Enabled} onCheckedChange={setM2Enabled} disabled={isRunning} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <Select value={m2Symbol} onValueChange={setM2Symbol} disabled={isRunning}>
-                  <SelectTrigger className="select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{SCANNER_MARKETS.map(m => <SelectItem key={m.symbol} value={m.symbol}>{m.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <div>
-                  <label className="text-[11px] text-slate-400 mb-1.5 block font-semibold">Recovery Strategy 🔥</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', display: 'block' }}>Recovery Strategy 🔥</label>
                   <Select value={m2RecoveryType} onValueChange={(v: M2RecoveryType) => { setM2RecoveryType(v); if (v !== 'disabled') setStrategyM2Enabled(true); }} disabled={isRunning}>
-                    <SelectTrigger className="select-trigger"><SelectValue placeholder="Select strategy" /></SelectTrigger>
-                    <SelectContent className="max-h-[300px] overflow-y-auto">
+                    <SelectTrigger><SelectValue placeholder="Select strategy" /></SelectTrigger>
+                    <SelectContent style={{ maxHeight: '300px', overflowY: 'auto' }}>
                       <SelectItem value="odd_even_3">{getM2DisplayName('odd_even_3')}</SelectItem>
                       <SelectItem value="odd_even_4">{getM2DisplayName('odd_even_4')}</SelectItem>
                       <SelectItem value="odd_even_5">{getM2DisplayName('odd_even_5')}</SelectItem>
@@ -1423,105 +1524,183 @@ const ProScannerBot = () => {
                   </Select>
                 </div>
                 <Select value={m2Contract} onValueChange={setM2Contract} disabled={isRunning}>
-                  <SelectTrigger className="select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{CONTRACT_TYPES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
-                {needsBarrier(m2Contract) && <Input type="number" min="0" max="9" value={m2Barrier} onChange={e => setM2Barrier(e.target.value)} className="input-field" disabled={isRunning} />}
-                <div className="hook-section">
-                  <div className="hook-header"><span><Anchor className="w-3 h-3"/> Virtual Hook</span><Switch checked={m2HookEnabled} onCheckedChange={setM2HookEnabled} disabled={isRunning} /></div>
-                  {m2HookEnabled && <div className="hook-inputs"><div><label>V-Losses</label><Input type="number" min="1" max="20" value={m2VirtualLossCount} onChange={e => setM2VirtualLossCount(e.target.value)} disabled={isRunning} /></div><div><label>Real Trades</label><Input type="number" min="1" max="10" value={m2RealCount} onChange={e => setM2RealCount(e.target.value)} disabled={isRunning} /></div></div>}
+                {needsBarrier(m2Contract) && <Input type="number" min="0" max="9" value={m2Barrier} onChange={e => setM2Barrier(e.target.value)} disabled={isRunning} />}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}><Anchor size={12} /> Virtual Hook</span>
+                    <Switch checked={m2HookEnabled} onCheckedChange={setM2HookEnabled} disabled={isRunning} />
+                  </div>
+                  {m2HookEnabled && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>V-Losses</label><Input type="number" min="1" max="20" value={m2VirtualLossCount} onChange={e => setM2VirtualLossCount(e.target.value)} disabled={isRunning} /></div>
+                      <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Real Trades</label><Input type="number" min="1" max="10" value={m2RealCount} onChange={e => setM2RealCount(e.target.value)} disabled={isRunning} /></div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             
             {/* Hook Stats */}
             {(m1HookEnabled || m2HookEnabled) && (
-              <div className="hook-stats">
-                <h3><Anchor className="w-3 h-3"/> Hook Status</h3>
-                <div className="stats-row">
-                  <div><div>V-Win</div><div className="win">{vhFakeWins}</div></div>
-                  <div><div>V-Loss</div><div className="loss">{vhFakeLosses}</div></div>
-                  <div><div>Streak</div><div className="streak">{vhConsecLosses}</div></div>
-                  <div><div>State</div><div className={`state ${vhStatus}`}>{vhStatus === 'confirmed' ? '✓' : vhStatus === 'waiting' ? '⏳' : '—'}</div></div>
+              <div style={{ padding: '16px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', fontSize: '14px' }}><Anchor size={12} /> Hook Status</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
+                  <div><div style={{ fontSize: '10px', color: '#94a3b8' }}>V-Win</div><div style={{ color: '#10b981', fontWeight: 'bold' }}>{vhFakeWins}</div></div>
+                  <div><div style={{ fontSize: '10px', color: '#94a3b8' }}>V-Loss</div><div style={{ color: '#ef4444', fontWeight: 'bold' }}>{vhFakeLosses}</div></div>
+                  <div><div style={{ fontSize: '10px', color: '#94a3b8' }}>Streak</div><div style={{ fontWeight: 'bold' }}>{vhConsecLosses}</div></div>
+                  <div><div style={{ fontSize: '10px', color: '#94a3b8' }}>State</div><div style={{ color: vhStatus === 'confirmed' ? '#10b981' : vhStatus === 'waiting' ? '#f59e0b' : '#64748b' }}>{vhStatus === 'confirmed' ? '✓' : vhStatus === 'waiting' ? '⏳' : '—'}</div></div>
                 </div>
               </div>
             )}
             
             {/* Risk Management */}
-            <div className="config-card risk-card">
-              <h3><Shield className="w-4 h-4"/> Risk Management</h3>
-              <div className="risk-inputs">
-                <div><label>Stake ($)</label><Input type="number" min="0.35" step="0.01" value={stake} onChange={e => setStake(e.target.value)} disabled={isRunning} /></div>
-                <div><label>Take Profit</label><Input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={isRunning} /></div>
-                <div><label>Stop Loss</label><Input type="number" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={isRunning} /></div>
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+              <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px' }}><Shield size={16} /> Risk Management</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Stake ($)</label><Input type="number" min="0.35" step="0.01" value={stake} onChange={e => setStake(e.target.value)} disabled={isRunning} /></div>
+                <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Take Profit</label><Input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} disabled={isRunning} /></div>
+                <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Stop Loss</label><Input type="number" value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={isRunning} /></div>
               </div>
-              <div className="martingale-toggle"><label>Martingale</label><Switch checked={martingaleOn} onCheckedChange={setMartingaleOn} disabled={isRunning} /></div>
-              {martingaleOn && <div className="martingale-inputs"><div><label>Multiplier</label><Input type="number" min="1.1" step="0.1" value={martingaleMultiplier} onChange={e => setMartingaleMultiplier(e.target.value)} disabled={isRunning} /></div><div><label>Max Steps</label><Input type="number" min="1" max="10" value={martingaleMaxSteps} onChange={e => setMartingaleMaxSteps(e.target.value)} disabled={isRunning} /></div></div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <label>Martingale</label>
+                <Switch checked={martingaleOn} onCheckedChange={setMartingaleOn} disabled={isRunning} />
+              </div>
+              {martingaleOn && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Multiplier</label><Input type="number" min="1.1" step="0.1" value={martingaleMultiplier} onChange={e => setMartingaleMultiplier(e.target.value)} disabled={isRunning} /></div>
+                  <div><label style={{ fontSize: '11px', color: '#94a3b8' }}>Max Steps</label><Input type="number" min="1" max="10" value={martingaleMaxSteps} onChange={e => setMartingaleMaxSteps(e.target.value)} disabled={isRunning} /></div>
+                </div>
+              )}
             </div>
             
             {/* Bot Config */}
-            <div className="config-card config-card-buttons">
-              <h3>💾 Bot Config</h3>
-              <Input placeholder="Enter bot name..." value={botName} onChange={e => setBotName(e.target.value)} disabled={isRunning} className="bot-name-input" />
-              <div className="config-buttons">
-                <Button size="sm" variant="outline" disabled={isRunning || !botName.trim()} onClick={() => { const safeName = botName.trim().replace(/[^a-zA-Z0-9_-]/g, '_'); const config = currentConfig; const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-'); const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${safeName}_${ts}.json`; a.click(); URL.revokeObjectURL(url); }}><Download className="w-3 h-3"/> Save</Button>
-                <Button size="sm" variant="outline" disabled={isRunning} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json'; input.onchange = (ev: any) => { const file = ev.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const cfg = JSON.parse(e.target?.result as string); if (cfg.m1 && cfg.m2 && cfg.risk) handleLoadConfig(cfg); } catch {} }; reader.readAsText(file); }; input.click(); }}><Upload className="w-3 h-3"/> Load</Button>
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <h3 style={{ marginBottom: '12px' }}>💾 Bot Config</h3>
+              <Input placeholder="Enter bot name..." value={botName} onChange={e => setBotName(e.target.value)} disabled={isRunning} style={{ marginBottom: '12px' }} />
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <Button size="sm" variant="outline" disabled={isRunning || !botName.trim()} onClick={() => { const safeName = botName.trim().replace(/[^a-zA-Z0-9_-]/g, '_'); const config = currentConfig; const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-'); const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${safeName}_${ts}.json`; a.click(); URL.revokeObjectURL(url); }}><Download size={12} /> Save</Button>
+                <Button size="sm" variant="outline" disabled={isRunning} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json'; input.onchange = (ev: any) => { const file = ev.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const cfg = JSON.parse(e.target?.result as string); if (cfg.m1 && cfg.m2 && cfg.risk) handleLoadConfig(cfg); } catch {} }; reader.readAsText(file); }; input.click(); }}><Upload size={12} /> Load</Button>
               </div>
             </div>
           </div>
           
           {/* Right Column */}
-          <div className="right-column">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Live Digits */}
-            <div className="digits-card">
-              <div className="digits-header"><h3>Live Digits — {activeSymbol}</h3><span className="winrate">Win Rate: {winRate}% | Staked: ${totalStaked.toFixed(2)}</span></div>
-              <div className="digits-container">{activeDigits.length === 0 ? <span className="waiting-text">Waiting for ticks...</span> : activeDigits.map((d, i) => { const isOver = d >= 5; const isEven = d % 2 === 0; const isLast = i === activeDigits.length - 1; return <div key={i} className={`digit ${isLast ? 'last' : ''} ${isOver ? 'over' : 'under'}`}><span>{d}</span><span className="digit-type">{isOver ? 'O' : 'U'}{isEven ? 'E' : 'O'}</span></div>; })}</div>
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0 }}>Live Digits — {activeSymbol}</h3>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>Win Rate: {winRate}% | Staked: ${totalStaked.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {activeDigits.length === 0 ? (
+                  <span style={{ color: '#64748b' }}>Waiting for ticks...</span>
+                ) : (
+                  activeDigits.map((d, i) => {
+                    const isOver = d >= 5;
+                    const isEven = d % 2 === 0;
+                    const isLast = i === activeDigits.length - 1;
+                    return (
+                      <div key={i} style={{
+                        width: '60px',
+                        padding: '12px',
+                        background: isLast ? 'linear-gradient(135deg, #06b6d4, #3b82f6)' : '#1e293b',
+                        borderRadius: '12px',
+                        textAlign: 'center',
+                        position: 'relative',
+                        boxShadow: isLast ? '0 0 20px rgba(6, 182, 212, 0.5)' : 'none'
+                      }}>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{d}</div>
+                        <div style={{ fontSize: '10px', marginTop: '4px', color: '#94a3b8' }}>{isOver ? 'O' : 'U'}{isEven ? 'E' : 'O'}</div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
             
             {/* Start/Stop Button */}
-            <button onClick={isRunning ? stopBot : startBot} disabled={(!isRunning && (!isConnected || localBalance < parseFloat(stake)))} className={`start-stop-btn ${isRunning ? 'stop' : 'start'}`}>
-              {isRunning ? <><StopCircle className="w-5 h-5 animate-pulse"/> STOP BOT</> : <><Play className="w-5 h-5"/> START BOT</>}
+            <button onClick={isRunning ? stopBot : startBot} disabled={(!isRunning && (!isConnected || localBalance < parseFloat(stake)))} style={{
+              width: '100%',
+              padding: '16px',
+              background: isRunning ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #10b981, #059669)',
+              border: 'none',
+              borderRadius: '12px',
+              color: 'white',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'transform 0.2s',
+              opacity: (!isRunning && (!isConnected || localBalance < parseFloat(stake))) ? 0.5 : 1
+            }}>
+              {isRunning ? <><StopCircle size={20} className="animate-pulse"/> STOP BOT</> : <><Play size={20}/> START BOT</>}
             </button>
             
             {/* Live Status Panel */}
-            <div className="status-panel">
-              <div className="status-header"><h3><Zap className="w-4 h-4"/> Live Status (Realtime)</h3>{isRunning && <span className="active-indicator"><span className="pulse"></span> ACTIVE</span>}</div>
-              <div className="status-grid">
-                <div><div>Status</div><div className={`status-value ${status.color}`}>{status.icon} {status.label}</div></div>
-                <div><div>Market</div><div className={`market-value ${currentMarket === 1 ? 'm1' : 'm2'}`}>{currentMarket === 1 ? 'M1 (HOME)' : 'M2 (RECOVERY)'}</div></div>
-                <div><div>Win Rate</div><div className="winrate-value">{winRate}%</div></div>
-                <div><div>Current P/L</div><div className={`pl-value ${netProfit >= 0 ? 'profit' : 'loss'}`}>${netProfit.toFixed(2)}</div></div>
-                <div><div>Current Stake</div><div className="stake-value">${currentStake.toFixed(2)}{martingaleStep > 0 && <span className="martingale-step">M{martingaleStep}</span>}</div></div>
-                <div><div>Balance</div><div className="balance-value">${localBalance.toFixed(2)}</div></div>
-                <div><div>Total Staked</div><div className="total-staked">${totalStaked.toFixed(2)}</div></div>
-                <div><div>W/L (Session)</div><div className="wl-value"><span className="wins">{wins}</span>/<span className="losses">{losses}</span></div></div>
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: 0 }}><Zap size={16} /> Live Status (Realtime)</h3>
+                {isRunning && <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#10b981' }}><span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 1s infinite' }}></span> ACTIVE</span>}
               </div>
-              {botStatus === 'virtual_hook' && <div className="hook-status"><Anchor className="w-3 h-3"/> Virtual Hook Active — Waiting for {m1HookEnabled ? m1VirtualLossCount : m2VirtualLossCount} consecutive losses... <span className="count">({vhConsecLosses}/{m1HookEnabled ? m1VirtualLossCount : m2VirtualLossCount})</span></div>}
-              {botStatus === 'waiting_pattern' && <div className="scanning-status"><Scan className="w-3 h-3"/> Scanning for pattern match...</div>}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Status</div><div style={{ fontWeight: 'bold', color: status.color }}>{status.icon} {status.label}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Market</div><div style={{ fontWeight: 'bold', color: currentMarket === 1 ? '#06b6d4' : '#a855f7' }}>{currentMarket === 1 ? 'M1 (HOME)' : 'M2 (RECOVERY)'}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Win Rate</div><div style={{ fontWeight: 'bold' }}>{winRate}%</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Current P/L</div><div style={{ fontWeight: 'bold', color: netProfit >= 0 ? '#10b981' : '#ef4444' }}>${netProfit.toFixed(2)}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Current Stake</div><div style={{ fontWeight: 'bold' }}>${currentStake.toFixed(2)}{martingaleStep > 0 && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#f59e0b' }}>M{martingaleStep}</span>}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Balance</div><div style={{ fontWeight: 'bold', color: '#fbbf24' }}>${localBalance.toFixed(2)}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Total Staked</div><div>{totalStaked.toFixed(2)}</div></div>
+                <div><div style={{ fontSize: '11px', color: '#94a3b8' }}>W/L (Session)</div><div><span style={{ color: '#10b981' }}>{wins}</span>/<span style={{ color: '#ef4444' }}>{losses}</span></div></div>
+              </div>
+              {botStatus === 'virtual_hook' && (
+                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(59, 130, 246, 0.2)', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Anchor size={12} /> Virtual Hook Active — Waiting for {m1HookEnabled ? m1VirtualLossCount : m2VirtualLossCount} consecutive losses... <span style={{ fontWeight: 'bold' }}>({vhConsecLosses}/{m1HookEnabled ? m1VirtualLossCount : m2VirtualLossCount})</span>
+                </div>
+              )}
+              {botStatus === 'waiting_pattern' && (
+                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(245, 158, 11, 0.2)', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Scan size={12} /> Scanning for pattern match...
+                </div>
+              )}
             </div>
             
             {/* Activity Log */}
-            <div className="log-card">
-              <div className="log-header"><h3><RefreshCw className="w-4 h-4"/> Activity Log <Badge variant="outline" className="log-count">{logEntries.length} entries</Badge></h3><div className="log-actions">{logEntries.length > 0 && logEntries[0].switchInfo && <span className="switch-info">📊 {logEntries[0].switchInfo}</span>}<Button variant="ghost" size="sm" onClick={clearLog} className="clear-log"><Trash2 className="w-4 h-4"/></Button></div></div>
-              <div className="log-table-wrapper">
-                <table className="log-table">
-                  <thead>
-                    <tr><th>Time</th><th>Mkt</th><th>Symbol</th><th>Type</th><th>Stake</th><th>Digit</th><th>Result</th><th>P/L</th><th>Bal</th></tr>
+            <div style={{ padding: '20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: 0 }}><RefreshCw size={16} /> Activity Log <Badge variant="outline">{logEntries.length} entries</Badge></h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {logEntries.length > 0 && logEntries[0].switchInfo && <span style={{ fontSize: '10px', color: '#94a3b8' }}>📊 {logEntries[0].switchInfo.substring(0, 50)}...</span>}
+                  <Button variant="ghost" size="sm" onClick={clearLog}><Trash2 size={16} /></Button>
+                </div>
+              </div>
+              <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: '#0f172a', zIndex: 1 }}>
+                    <tr style={{ borderBottom: '1px solid #334155' }}>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Time</th><th style={{ padding: '8px', textAlign: 'left' }}>Mkt</th><th style={{ padding: '8px', textAlign: 'left' }}>Symbol</th><th style={{ padding: '8px', textAlign: 'left' }}>Type</th><th style={{ padding: '8px', textAlign: 'left' }}>Stake</th><th style={{ padding: '8px', textAlign: 'left' }}>Digit</th><th style={{ padding: '8px', textAlign: 'left' }}>Result</th><th style={{ padding: '8px', textAlign: 'left' }}>P/L</th><th style={{ padding: '8px', textAlign: 'left' }}>Bal</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {logEntries.length === 0 ? (
-                      <tr><td colSpan={9} className="empty-log"><div><Zap className="w-8 h-8"/><span>No trades yet — configure and start the bot</span></div></td></tr>
+                      <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}><Zap size={32} style={{ marginBottom: '8px' }} /><br />No trades yet — configure and start the bot</td></tr>
                     ) : logEntries.map(e => (
-                      <tr key={e.id} className={`log-row ${e.market === 'M1' ? 'm1-row' : e.market === 'VH' ? 'vh-row' : 'm2-row'}`}>
-                        <td className="time">{e.time}</td>
-                        <td className={`market ${e.market === 'M1' ? 'm1' : e.market === 'VH' ? 'vh' : 'm2'}`}>{e.market}</td>
-                        <td className="symbol">{e.symbol}</td>
-                        <td className="contract">{e.contract.replace('DIGIT', '')}</td>
-                        <td className="stake">{e.market === 'VH' ? <span className="fake">FAKE</span> : <span>${e.stake.toFixed(2)}</span>}{e.martingaleStep > 0 && e.market !== 'VH' && <span className="martingale-step">M{e.martingaleStep}</span>}</td>
-                        <td className="digit">{e.exitDigit}</td>
-                        <td className="result"><span className={`result-badge ${e.result === 'Win' || e.result === 'V-Win' ? 'win' : e.result === 'Loss' || e.result === 'V-Loss' ? 'loss' : 'pending'}`}>{e.result === 'Pending' ? '...' : e.result === 'V-Win' ? '✓' : e.result === 'V-Loss' ? '✗' : e.result}</span></td>
-                        <td className={`pnl ${e.pnl > 0 ? 'profit' : e.pnl < 0 ? 'loss' : ''}`}>{e.result === 'Pending' ? '...' : e.market === 'VH' ? '-' : `${e.pnl > 0 ? '+' : ''}${e.pnl.toFixed(2)}`}</td>
-                        <td className="balance">{e.market === 'VH' ? '-' : `$${e.balance.toFixed(2)}`}</td>
+                      <tr key={e.id} style={{ borderBottom: '1px solid #1e293b', background: e.market === 'M1' ? 'rgba(6, 182, 212, 0.05)' : e.market === 'VH' ? 'rgba(59, 130, 246, 0.05)' : 'rgba(168, 85, 247, 0.05)' }}>
+                        <td style={{ padding: '8px' }}>{e.time}</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold', color: e.market === 'M1' ? '#06b6d4' : e.market === 'VH' ? '#3b82f6' : '#a855f7' }}>{e.market}</td>
+                        <td style={{ padding: '8px' }}>{e.symbol}</td>
+                        <td style={{ padding: '8px' }}>{e.contract.replace('DIGIT', '')}</td>
+                        <td style={{ padding: '8px' }}>{e.market === 'VH' ? <span style={{ color: '#f59e0b' }}>FAKE</span> : <span>${e.stake.toFixed(2)}</span>}{e.martingaleStep > 0 && e.market !== 'VH' && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#f59e0b' }}>M{e.martingaleStep}</span>}</td>
+                        <td style={{ padding: '8px' }}>{e.exitDigit}</td>
+                        <td style={{ padding: '8px' }}><span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', background: (e.result === 'Win' || e.result === 'V-Win') ? 'rgba(16, 185, 129, 0.2)' : (e.result === 'Loss' || e.result === 'V-Loss') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: (e.result === 'Win' || e.result === 'V-Win') ? '#10b981' : (e.result === 'Loss' || e.result === 'V-Loss') ? '#ef4444' : '#f59e0b' }}>{e.result === 'Pending' ? '...' : e.result === 'V-Win' ? '✓' : e.result === 'V-Loss' ? '✗' : e.result}</span></td>
+                        <td style={{ padding: '8px', color: e.pnl > 0 ? '#10b981' : e.pnl < 0 ? '#ef4444' : '#94a3b8' }}>{e.result === 'Pending' ? '...' : e.market === 'VH' ? '-' : `${e.pnl > 0 ? '+' : ''}${e.pnl.toFixed(2)}`}</td>
+                        <td style={{ padding: '8px' }}>{e.market === 'VH' ? '-' : `$${e.balance.toFixed(2)}`}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1531,6 +1710,15 @@ const ProScannerBot = () => {
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+          animation: pulse 1s infinite;
+        }
+      `}</style>
     </>
   );
 };
